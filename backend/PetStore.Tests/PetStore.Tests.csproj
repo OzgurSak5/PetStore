@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\PetStore.Domain\PetStore.Domain.csproj" />
+    <ProjectReference Include="..\PetStore.Infrastructure\PetStore.Infrastructure.csproj" />
+    <ProjectReference Include="..\PetStore.Api\PetStore.Api.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>
