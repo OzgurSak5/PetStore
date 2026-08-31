@@ -31,4 +31,11 @@ public class BreedController : ControllerBase
         }
         return Ok(breed);
     }
+
+    [HttpPost]
+    public async Task<IActionResult> Create([FromBody] CreateBreedRequest request)
+    {
+        var breed = await _breedService.CreateAsync(request);
+        return CreatedAtAction(nameof(GetById), new { id = breed.Id }, breed);
+    }
 }

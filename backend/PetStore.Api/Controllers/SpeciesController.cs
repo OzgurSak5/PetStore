@@ -31,4 +31,11 @@ public class SpeciesController : ControllerBase
         }
         return Ok(species);
     }
+
+    [HttpPost]
+    public async Task<IActionResult> Create([FromBody] string name)
+    {
+        var species = await _speciesService.CreateAsync(name);
+        return CreatedAtAction(nameof(GetById), new { id = species.Id }, species);
+    }
 }
