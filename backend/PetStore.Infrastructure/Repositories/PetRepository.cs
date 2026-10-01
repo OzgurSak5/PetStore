@@ -16,12 +16,12 @@ public class PetRepository : IPetRepository
 
     public async Task<List<Pet>> GetAllAsync()
     {
-        return await _context.Pets.ToListAsync();
+        return await _context.Pets.Include(p => p.Breed).ThenInclude(b => b.Species).ToListAsync();
     }
 
     public async Task<Pet?> GetByIdAsync(int id)
     {
-        return await _context.Pets.FindAsync(id);
+        return await _context.Pets.Include(p => p.Breed).ThenInclude(b => b.Species).FirstOrDefaultAsync(p => p.Id == id);
     }
 
     public async Task<Pet> AddAsync(Pet pet)

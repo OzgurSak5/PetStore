@@ -23,6 +23,22 @@ public class PetStoreDbContext : DbContext
         base.OnModelCreating(modelBuilder);
 
         modelBuilder.Entity<Favorite>()
-            .HasKey(f => new { f.UserId, f.PetId });
+        .HasKey(f => new { f.UserId, f.PetId });
+
+        modelBuilder.Entity<Pet>()
+            .Property(p => p.Status)
+            .HasConversion<string>();
+
+        modelBuilder.Entity<Pet>()
+            .Property(p => p.Gender)
+            .HasConversion<string>();
+
+        modelBuilder.Entity<Order>()
+            .Property(o => o.Status)
+            .HasConversion<string>();
+
+        modelBuilder.Entity<User>()
+            .Property(u => u.Role)
+            .HasConversion<string>();
     }
-}    
+}
