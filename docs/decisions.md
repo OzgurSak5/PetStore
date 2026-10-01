@@ -145,3 +145,97 @@ OpenAPI-first çalışma disiplinidir.
 
 **Gerekçe:** Tamamen farklı bir sisteme dayandığı için genel olarak v1 kapsamına
 alınmadı ileride v2, v3 versiyonlarında düşünülebilir.
+
+---
+
+## 12. Her kaynak için repository + service katmanı
+
+**Karar:** Her veri kaynağı (`Species`, `Breed`, `User`, `Pet`) için üç parça
+oluşturuluyor: `Domain`'de repository arayüzü, `Infrastructure`'da implementasyonu,
+`Domain`'de servis sınıfı. Controller yalnızca servis arayüzünü tanır.
+
+**Gerekçe:** Controller'ın `DbContext`'e doğrudan erişmemesi, veri erişim kodunun HTTP
+katmanına sızmasını engelliyor. İş kuralları servis katmanında tek noktada toplanıyor —
+örneğin `Pet` oluşturulurken `Status`, `CreatedAt` ve `UpdatedAt` alanlarının dışarıdan
+alınmayıp servis tarafından doldurulması. Servisler yalnızca arayüzlere bağımlı olduğu
+için birim testlerinde sahte (mock) repository ile çalıştırılabiliyor.
+
+**Alternatif:** Basit kaynaklarda (`Species` gibi iş kuralı taşımayanlarda) controller'ın
+doğrudan `DbContext` kullanması. Daha az kod üretirdi, ancak aynı projede iki farklı
+desen bulunması tutarsızlık yaratacağı için tercih edilmedi.
+
+---
+
+## 13. Repository sorgularında `FirstOrDefaultAsync` kullanımı
+
+**Karar:** Birincil anahtarla tekil kayıt getiren repository metotlarında `FindAsync`
+yerine `FirstOrDefaultAsync` kullanılıyor.
+
+**Gerekçe:** `FindAsync` önce EF Core'un değişiklik takip listesine bakar ve kayıt
+bellekteyse veritabanına hiç gitmez; bu yönüyle daha verimlidir. Ancak `Include`
+zincirini desteklemez. `PetResponse` içindeki `BreedName` ve `SpeciesName` alanlarının
+doldurulabilmesi için ilişkili verinin yüklenmesi zorunlu olduğundan, bu verimlilik
+avantajından vazgeçildi.
+
+**Alternatif:** `FindAsync` kullanıp ilişkili veriyi ayrı sorgularla çekmek. Daha fazla
+veritabanı turu anlamına geldiği için tercih edilmedi.
+
+---
+
+## 14. API cevaplarında entity yerine response DTO'ları
+
+**Karar:** Servis katmanı entity değil DTO döndürüyor (`PetResponse`, `SpeciesResponse`
+vb.). DTO'lar `Domain/DTOs/` altında tutuluyor.
+
+**Gerekçe:** Entity'lerin doğrudan serileştirilmesi üç somut soruna yol açtı. Birincisi,
+navigation property'ler döngü oluşturdu (`Pet` → `Breed` → `Pets` → `Pet`) ve
+serileştirme hatası verdi. İkincisi, dışarıya açılmaması gereken alanlar cevaba sızdı —
+`User.PasswordHash` bunun en net örneği. Üçüncüsü ve en önemlisi, veritabanı şeması ile
+API sözleşmesi aynı sınıfa bağlı kaldığı sürece şemadaki her değişiklik sözleşmeyi de
+habersizce değiştiriyor. DTO bu bağı koparıyor: entity değişse bile DTO sabit kaldığı
+sürece API tüketicileri etkilenmiyor.
+
+DTO'lar ayrıca veriyi tüketiciye uygun biçime getiriyor: enum'lar sayı yerine metin
+olarak sunuluyor, ilişkili nesneler iç içe gömülmek yerine düzleştiriliyor
+(`breed.name` yerine `breedName`), ve saklanmayan `Age` alanı `BirthDate`'ten
+hesaplanarak ekleniyor.
+
+**Alternatif:** `ReferenceHandler.IgnoreCycles` ayarıyla döngüyü kırmak. Yalnızca
+serileştirme hatasını önlüyor, cevapta `null` değerler bırakıyor ve diğer iki sorunu
+hiç çözmüyor. Geçici çözüm olarak kullanıldı, DTO'lara geçişle birlikte kaldırıldı.
+
+---
+
+## 15. Enum'lar veritabanında metin olarak saklanıyor
+
+**Karar:** `PetStatus`, `Gender`, `OrderStatus` ve `UserRole` alanları
+`HasConversion<string>()` ile metin sütunlara eşleniyor. C# tarafında enum olarak
+kullanılmaya devam ediyor.
+
+**Gerekçe:** Veritabanına doğrudan bakıldığında `Status` sütununda `0` yerine
+`Available` görünüyor; sorgu yazarken ve veri incelerken enum sıralamasını koda bakıp
+hatırlamak gerekmiyor. Ayrıca enum tanımının ortasına yeni bir değer eklendiğinde
+sonraki değerlerin sayısal karşılığı kayar ve mevcut kayıtların anlamı sessizce
+değişir — metin saklandığında bu risk ortadan kalkıyor.
+
+**Alternatif:** Varsayılan davranış olan tamsayı saklama. Daha az yer kaplıyor ve
+karşılaştırmada marjinal olarak daha hızlı, ancak bu ölçekte fark edilir bir kazanç
+sağlamıyor.
+
+---
+
+## 16. Tip değiştiren migration'lar mevcut veriyi dönüştürmez
+
+**Karar:** Enum sütunlarını `integer`'dan `text`'e çeviren migration uygulanmadan önce
+mevcut test verisi silindi.
+
+**Gerekçe:** EF Core'un ürettiği `AlterColumn` çağrısı yalnızca sütun tipini değiştiriyor,
+içindeki değerleri yeni anlamlarına çevirmiyor. PostgreSQL `0` tamsayısını `text`'e
+dönüştürdüğünde ortaya `"Available"` değil `"0"` metni çıkıyor ve uygulama bu değeri
+enum'a geri çeviremiyor. Bu projede veriler test amaçlı olduğu için silmek en pratik
+yoldu.
+
+**Not:** Gerçek veriyle çalışan bir sistemde bu yol izlenemez. Migration'a `AlterColumn`
+öncesinde elle `UPDATE` ifadeleri eklenerek mevcut değerlerin karşılıkları yazılmalıdır.
+Tip değiştiren her migration'ın mevcut veriyi nasıl etkilediği uygulamadan önce
+incelenmelidir.
