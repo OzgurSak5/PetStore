@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
 using PetStore.Domain.Interfaces;
+using PetStore.Domain.DTOs;
 
 namespace PetStore.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Produces("application/json")]
 public class SpeciesController : ControllerBase
 {
     private readonly ISpeciesService _speciesService;
@@ -15,6 +17,7 @@ public class SpeciesController : ControllerBase
     }
 
     [HttpGet]
+    [ProducesResponseType<List<SpeciesResponse>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAll()
     {
         var speciesList = await _speciesService.GetAllAsync();
@@ -22,6 +25,8 @@ public class SpeciesController : ControllerBase
     }
 
     [HttpGet("{id}")]
+    [ProducesResponseType<SpeciesResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById(int id)
     {
         var species = await _speciesService.GetByIdAsync(id);
@@ -33,6 +38,7 @@ public class SpeciesController : ControllerBase
     }
 
     [HttpPost]
+    [ProducesResponseType<SpeciesResponse>(StatusCodes.Status201Created)]
     public async Task<IActionResult> Create([FromBody] string name)
     {
         var species = await _speciesService.CreateAsync(name);
