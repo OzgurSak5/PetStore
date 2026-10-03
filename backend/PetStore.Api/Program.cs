@@ -3,7 +3,6 @@ using PetStore.Domain.Interfaces;
 using PetStore.Domain.Services;
 using PetStore.Infrastructure.Data;
 using PetStore.Infrastructure.Repositories;
-using System.Text.Json.Serialization;
 using PetStore.Api.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -23,11 +22,7 @@ builder.Services.AddScoped<IPetService, PetService>();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
 
-builder.Services.AddControllers()
-    .AddJsonOptions(options =>
-    {
-        options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
-    });
+builder.Services.AddControllers();
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddEndpointsApiExplorer();
