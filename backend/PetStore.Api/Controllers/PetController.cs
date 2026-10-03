@@ -36,14 +36,7 @@ public class PetController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreatePetRequest request)
     {
-        try
-        {
-            var pet = await _petService.CreateAsync(request);
+        var pet = await _petService.CreateAsync(request);
         return CreatedAtAction(nameof(GetById), new { id = pet.Id }, pet);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
     }
 }

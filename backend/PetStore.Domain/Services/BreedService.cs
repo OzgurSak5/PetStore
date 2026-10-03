@@ -1,6 +1,7 @@
 using PetStore.Domain.Interfaces;
 using PetStore.Domain.Entities;
 using PetStore.Domain.DTOs;
+using PetStore.Domain.Exceptions;
 
 namespace PetStore.Domain.Services;
 
@@ -33,7 +34,7 @@ public class BreedService : IBreedService
 
         if (species == null)
         {
-            throw new InvalidOperationException("Species not found.");
+            throw new ValidationException("Species not found.");
         }
 
         var breed = new Breed

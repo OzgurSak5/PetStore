@@ -2,6 +2,7 @@ using PetStore.Domain.Entities;
 using PetStore.Domain.Enums;
 using PetStore.Domain.Interfaces;
 using PetStore.Domain.DTOs;
+using PetStore.Domain.Exceptions;
 
 namespace PetStore.Domain.Services;
 
@@ -34,7 +35,7 @@ public class PetService : IPetService
 
         if (breed is null)
         {
-            throw new InvalidOperationException("Breed not found.");
+            throw new ValidationException("Breed not found.");
         }
 
         var pet = new Pet
