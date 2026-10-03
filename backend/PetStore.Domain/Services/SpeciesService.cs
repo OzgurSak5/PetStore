@@ -1,5 +1,6 @@
 using PetStore.Domain.Entities;
 using PetStore.Domain.Interfaces;
+using PetStore.Domain.DTOs;
 
 namespace PetStore.Domain.Services;
 
@@ -12,19 +13,31 @@ public class SpeciesService : ISpeciesService
         _speciesRepository = speciesRepository;
     }
 
-    public async Task<List<Species>> GetAllAsync()
+    public async Task<List<SpeciesResponse>> GetAllAsync()
     {
-        return await _speciesRepository.GetAllAsync();
+        var speciesList = await _speciesRepository.GetAllAsync();
+        return speciesList.Select(MapToResponse).ToList();
     }
 
-    public async Task<Species?> GetByIdAsync(int id)
+    public async Task<SpeciesResponse?> GetByIdAsync(int id)
     {
-        return await _speciesRepository.GetByIdAsync(id);
+        var species = await _speciesRepository.GetByIdAsync(id);
+        return species != null ? MapToResponse(species) : null;
     }
 
-    public async Task<Species> CreateAsync(string name)
+    public async Task<SpeciesResponse> CreateAsync(string name)
     {
         var species = new Species { Name = name };
-        return await _speciesRepository.AddAsync(species);
+        var createdSpecies = await _speciesRepository.AddAsync(species);
+        return MapToResponse(createdSpecies);
+    }
+
+
+    private static SpeciesResponse MapToResponse(Species species)
+    {
+        return new SpeciesResponse(
+            Id: species.Id,
+            Name: species.Name
+        );
     }
 }

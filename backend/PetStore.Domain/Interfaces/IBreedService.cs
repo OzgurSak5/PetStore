@@ -1,12 +1,12 @@
-using PetStore.Domain.Entities;
+using PetStore.Domain.DTOs;
 
 namespace PetStore.Domain.Interfaces;
 
 public interface IBreedService
 {
-    Task<List<Breed>> GetAllAsync();
-    Task<Breed?> GetByIdAsync(int id);
-    Task<Breed> CreateAsync(CreateBreedRequest request);
+    Task<List<BreedResponse>> GetAllAsync();
+    Task<BreedResponse?> GetByIdAsync(int id);
+    Task<BreedResponse> CreateAsync(CreateBreedRequest request);
 }
 
 public record CreateBreedRequest(

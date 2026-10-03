@@ -35,7 +35,14 @@ public class BreedController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateBreedRequest request)
     {
-        var breed = await _breedService.CreateAsync(request);
-        return CreatedAtAction(nameof(GetById), new { id = breed.Id }, breed);
+        try
+        {
+            var breed = await _breedService.CreateAsync(request);
+            return CreatedAtAction(nameof(GetById), new { id = breed.Id }, breed);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 }

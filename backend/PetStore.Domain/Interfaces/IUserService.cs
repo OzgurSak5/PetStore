@@ -1,13 +1,13 @@
-using PetStore.Domain.Entities;
+using PetStore.Domain.DTOs;
 using PetStore.Domain.Enums;
 
 namespace PetStore.Domain.Interfaces;
 
 public interface IUserService
 {
-    Task<List<User>> GetAllAsync();
-    Task<User?> GetByIdAsync(int id);
-    Task<User> CreateAsync(CreateUserRequest request);
+    Task<List<UserResponse>> GetAllAsync();
+    Task<UserResponse?> GetByIdAsync(int id);
+    Task<UserResponse> CreateAsync(CreateUserRequest request);
 }
 
 public record CreateUserRequest(

@@ -34,7 +34,7 @@ public class PetService : IPetService
 
         if (breed is null)
         {
-            throw new InvalidOperationException("Belirtilen cins bulunamadı.");
+            throw new InvalidOperationException("Breed not found.");
         }
 
         var pet = new Pet

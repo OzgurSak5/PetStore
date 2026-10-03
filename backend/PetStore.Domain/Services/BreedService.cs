@@ -1,29 +1,41 @@
 using PetStore.Domain.Interfaces;
 using PetStore.Domain.Entities;
+using PetStore.Domain.DTOs;
 
 namespace PetStore.Domain.Services;
 
 public class BreedService : IBreedService
 {
     private readonly IBreedRepository _breedRepository;
+    private readonly ISpeciesRepository _speciesRepository;
 
-    public BreedService(IBreedRepository breedRepository)
+    public BreedService(IBreedRepository breedRepository, ISpeciesRepository speciesRepository)
     {
         _breedRepository = breedRepository;
+        _speciesRepository = speciesRepository;
     }
 
-    public async Task<List<Breed>> GetAllAsync()
+    public async Task<List<BreedResponse>> GetAllAsync()
     {
-        return await _breedRepository.GetAllAsync();
+        var breeds = await _breedRepository.GetAllAsync();
+        return breeds.Select(MapToResponse).ToList();
     }
 
-    public async Task<Breed?> GetByIdAsync(int id)
+    public async Task<BreedResponse?> GetByIdAsync(int id)
     {
-        return await _breedRepository.GetByIdAsync(id);
+        var breed = await _breedRepository.GetByIdAsync(id);
+        return breed != null ? MapToResponse(breed) : null;
     }
 
-    public async Task<Breed> CreateAsync(CreateBreedRequest request)
+    public async Task<BreedResponse> CreateAsync(CreateBreedRequest request)
     {
+        var species = await _speciesRepository.GetByIdAsync(request.SpeciesId);
+
+        if (species == null)
+        {
+            throw new InvalidOperationException("Species not found.");
+        }
+
         var breed = new Breed
         {
             Name = request.Name,
@@ -37,6 +49,26 @@ public class BreedService : IBreedService
             GroomingNeeds = request.GroomingNeed
         };
 
-        return await _breedRepository.AddAsync(breed);
+        await _breedRepository.AddAsync(breed);
+
+        var createdBreed = await _breedRepository.GetByIdAsync(breed.Id);
+        return MapToResponse(createdBreed!);
+    }
+
+    private static BreedResponse MapToResponse(Breed breed)
+    {
+        return new BreedResponse(
+            Id: breed.Id,
+            Name: breed.Name,
+            SpeciesId: breed.SpeciesId,
+            SpeciesName: breed.Species?.Name ?? string.Empty,
+            EnergyLevel: breed.EnergyLevel,
+            NoiseLevel: breed.NoiseLevel,
+            SpaceRequirement: breed.SpaceRequirements,
+            AppetiteLevel: breed.AppetiteLevel,
+            GoodWithChildren: breed.GoodWithChildren,
+            GoodWithOtherPets: breed.GoodWithOtherPets,
+            GroomingNeed: breed.GroomingNeeds
+        );
     }
 }

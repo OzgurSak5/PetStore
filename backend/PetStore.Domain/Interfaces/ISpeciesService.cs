@@ -1,10 +1,10 @@
-using PetStore.Domain.Entities;
+using PetStore.Domain.DTOs;
 
 namespace PetStore.Domain.Interfaces;
 
 public interface ISpeciesService
 {
-    Task<List<Species>> GetAllAsync();
-    Task<Species?> GetByIdAsync(int id);
-    Task<Species> CreateAsync(string name);
+    Task<List<SpeciesResponse>> GetAllAsync();
+    Task<SpeciesResponse?> GetByIdAsync(int id);
+    Task<SpeciesResponse> CreateAsync(string name);
 }

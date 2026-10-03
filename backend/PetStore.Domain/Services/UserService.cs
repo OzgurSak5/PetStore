@@ -1,5 +1,6 @@
 using PetStore.Domain.Entities;
 using PetStore.Domain.Interfaces;
+using PetStore.Domain.DTOs;
 
 namespace PetStore.Domain.Services;
 
@@ -12,17 +13,19 @@ public class UserService : IUserService
         _userRepository = userRepository;
     }
 
-    public async Task<List<User>> GetAllAsync()
+    public async Task<List<UserResponse>> GetAllAsync()
     {
-        return await _userRepository.GetAllAsync();
+        var users = await _userRepository.GetAllAsync();
+        return users.Select(MapToResponse).ToList();
     }
 
-    public async Task<User?> GetByIdAsync(int id)
+    public async Task<UserResponse?> GetByIdAsync(int id)
     {
-        return await _userRepository.GetByIdAsync(id);
+        var user = await _userRepository.GetByIdAsync(id);
+        return user != null ? MapToResponse(user) : null;
     }
 
-    public async Task<User> CreateAsync(CreateUserRequest request)
+    public async Task<UserResponse> CreateAsync(CreateUserRequest request)
     {
         var user = new User
         {
@@ -32,6 +35,16 @@ public class UserService : IUserService
             CreatedAt = DateTime.UtcNow
         };
 
-        return await _userRepository.AddAsync(user);
+        var createdUser = await _userRepository.AddAsync(user);
+        return MapToResponse(createdUser);
+    }
+
+    private static UserResponse MapToResponse(User user)
+    {
+        return new UserResponse(
+            Id: user.Id,
+            Email: user.Email,
+            Role: user.Role.ToString()
+        );
     }
 }

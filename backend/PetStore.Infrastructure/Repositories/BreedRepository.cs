@@ -23,11 +23,11 @@ public class BreedRepository : IBreedRepository
 
     public async Task<List<Breed>> GetAllAsync()
     {
-        return await _context.Breeds.ToListAsync();
+        return await _context.Breeds.Include(b => b.Species).ToListAsync();
     }
 
     public async Task<Breed?> GetByIdAsync(int id)
     {
-        return await _context.Breeds.FindAsync(id);
+        return await _context.Breeds.Include(b => b.Species).FirstOrDefaultAsync(b => b.Id == id);
     }
 }
