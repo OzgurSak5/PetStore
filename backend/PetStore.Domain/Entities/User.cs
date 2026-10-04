@@ -9,6 +9,7 @@ public class User
     public string PasswordHash { get; set; } = string.Empty;
     public UserRole Role { get; set; }
     public DateTime CreatedAt { get; set; }
+    public bool IsDeleted { get; set; }
     
     public ICollection<Order> Orders { get; set; } = new List<Order>();
     public ICollection<Favorite> Favorites { get; set; } = new List<Favorite>();

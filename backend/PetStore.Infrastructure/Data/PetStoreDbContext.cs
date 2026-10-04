@@ -40,5 +40,11 @@ public class PetStoreDbContext : DbContext
         modelBuilder.Entity<User>()
             .Property(u => u.Role)
             .HasConversion<string>();
+            
+        modelBuilder.Entity<Pet>()
+            .HasQueryFilter(p => !p.IsDeleted);
+
+        modelBuilder.Entity<User>()
+            .HasQueryFilter(u => !u.IsDeleted);
     }
 }

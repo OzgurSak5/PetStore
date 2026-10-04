@@ -17,6 +17,51 @@ public class PetService : IPetService
         _breedRepository = breedRepository;
     }
 
+    public async Task<PetResponse> UpdateAsync(int id, UpdatePetRequest request)
+    {
+        var pet = await _petRepository.GetByIdAsync(id);
+
+        if (pet is null)
+        {
+            throw new NotFoundException("Pet not found.");
+        }
+
+        var breed = await _breedRepository.GetByIdAsync(request.BreedId);
+
+        if (breed is null)
+        {
+            throw new ValidationException("Breed not found.");
+        }
+
+        pet.Name = request.Name;
+        pet.BreedId = request.BreedId;
+        pet.BirthDate = request.BirthDate;
+        pet.Gender = request.Gender;
+        pet.Price = request.Price;
+        pet.IsVaccinated = request.IsVaccinated;
+        pet.Status = request.Status;
+        pet.UpdatedAt = DateTime.UtcNow;
+
+        await _petRepository.UpdateAsync(pet);
+        var updatedPet = await _petRepository.GetByIdAsync(id);
+        return MapToResponse(updatedPet!);
+    }
+
+    public async Task DeleteAsync(int id)
+    {
+        var pet = await _petRepository.GetByIdAsync(id);
+
+        if (pet is null)
+        {
+            throw new NotFoundException("Pet not found.");
+        }
+
+        pet.IsDeleted = true;
+        pet.UpdatedAt = DateTime.UtcNow;
+
+        await _petRepository.UpdateAsync(pet);
+    }
+
     public async Task<List<PetResponse>> GetAllAsync()
     {
         var pets = await _petRepository.GetAllAsync();
@@ -53,7 +98,7 @@ public class PetService : IPetService
 
         await _petRepository.AddAsync(pet);
 
-        var createdPet = await _petRepository.AddAsync(pet);
+        var createdPet = await _petRepository.GetByIdAsync(pet.Id);
         return MapToResponse(createdPet!);
     }
     

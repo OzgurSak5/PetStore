@@ -30,4 +30,10 @@ public class PetRepository : IPetRepository
         await _context.SaveChangesAsync();
         return pet;
     }
+
+    public async Task UpdateAsync(Pet pet)
+    {
+        _context.Pets.Update(pet);
+        await _context.SaveChangesAsync();
+    }
 }

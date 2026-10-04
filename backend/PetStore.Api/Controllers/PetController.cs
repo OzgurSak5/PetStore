@@ -16,6 +16,25 @@ public class PetController : ControllerBase
         _petService = petService;
     }
 
+    [HttpPut("{id}")]
+    [ProducesResponseType<PetResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Update(int id, [FromBody] UpdatePetRequest request)
+    {
+        var pet = await _petService.UpdateAsync(id, request);
+        return Ok(pet);
+    }
+
+    [HttpDelete("{id}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Delete(int id)
+    {
+        await _petService.DeleteAsync(id);
+        return NoContent();
+    }
+
     [HttpGet]
     [ProducesResponseType<List<PetResponse>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAll()
@@ -46,6 +65,4 @@ public class PetController : ControllerBase
         var pet = await _petService.CreateAsync(request);
         return CreatedAtAction(nameof(GetById), new { id = pet.Id }, pet);
     }
-
-    
 }
