@@ -16,6 +16,25 @@ public class SpeciesController : ControllerBase
         _speciesService = speciesService;
     }
 
+    [HttpPut("{id}")]
+    [ProducesResponseType<SpeciesResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Update(int id, [FromBody] string name)
+    {
+        var species = await _speciesService.UpdateAsync(id, name);
+        return Ok(species);
+    }
+
+    [HttpDelete("{id}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Delete(int id)
+    {
+        await _speciesService.DeleteAsync(id);
+        return Ok();
+    }
+
     [HttpGet]
     [ProducesResponseType<List<SpeciesResponse>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAll()

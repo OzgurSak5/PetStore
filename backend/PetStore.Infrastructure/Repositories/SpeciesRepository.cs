@@ -14,6 +14,18 @@ public class SpeciesRepository : ISpeciesRepository
         _context = context;
     }
 
+    public async Task UpdateAsync(Species species)
+    {
+        _context.Species.Update(species);
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task DeleteAsync(Species species)
+    {
+        _context.Species.Remove(species);
+        await _context.SaveChangesAsync();
+    }
+
     public async Task<Species> AddAsync(Species species)
     {
         _context.Species.Add(species);
@@ -30,4 +42,4 @@ public class SpeciesRepository : ISpeciesRepository
     {
         return await _context.Species.FindAsync(id);
     }
-}    
+}

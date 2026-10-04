@@ -14,6 +14,11 @@ public class BreedRepository : IBreedRepository
         _context = context;
     }
 
+    public async Task<bool> ExistsBySpeciesIdAsync(int speciesId)
+    {
+        return await _context.Breeds.AnyAsync(b => b.SpeciesId == speciesId);
+    }
+
     public async Task<Breed> AddAsync(Breed breed)
     {
         _context.Breeds.Add(breed);

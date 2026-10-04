@@ -29,6 +29,12 @@ public class GlobalExceptionHandler : IExceptionHandler
                 Title = "Bad Request",
                 Detail = exception.Message
             },
+            ConflictException => new ProblemDetails
+            {
+                Status = StatusCodes.Status409Conflict,
+                Title = "Conflict",
+                Detail = exception.Message
+            },
             _ => new ProblemDetails
             {
                 Status = StatusCodes.Status500InternalServerError,
