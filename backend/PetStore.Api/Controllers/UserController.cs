@@ -16,6 +16,24 @@ public class UserController : ControllerBase
         _userService = userService;
     }
 
+    [HttpPut("{id}")]
+    [ProducesResponseType<UserResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Update(int id, [FromBody] UpdateUserRequest request)
+    {
+        var user = await _userService.UpdateAsync(id, request);
+        return Ok(user);
+    }
+
+    [HttpDelete("{id}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Delete(int id)
+    {
+        await _userService.DeleteAsync(id);
+        return NoContent();
+    }
+
     [HttpGet]
     [ProducesResponseType<List<UserResponse>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAll()

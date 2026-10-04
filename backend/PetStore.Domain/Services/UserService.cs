@@ -1,6 +1,7 @@
 using PetStore.Domain.Entities;
 using PetStore.Domain.Interfaces;
 using PetStore.Domain.DTOs;
+using PetStore.Domain.Exceptions;
 
 namespace PetStore.Domain.Services;
 
@@ -11,6 +12,37 @@ public class UserService : IUserService
     public UserService(IUserRepository userRepository)
     {
         _userRepository = userRepository;
+    }
+
+    public async Task<UserResponse> UpdateAsync(int id, UpdateUserRequest request)
+    {
+        var user = await _userRepository.GetByIdAsync(id);
+
+        if (user == null)
+        {
+            throw new NotFoundException("User not found.");
+        }
+
+        user.Email = request.Email;
+        user.Role = request.Role;
+
+        await _userRepository.UpdateAsync(user);
+
+        return MapToResponse(user);
+    }
+
+    public async Task DeleteAsync(int id)
+    {
+        var user = await _userRepository.GetByIdAsync(id);
+
+        if (user == null)
+        {
+            throw new NotFoundException("User not found.");
+        }
+
+        user.IsDeleted = true;
+
+        await _userRepository.UpdateAsync(user);
     }
 
     public async Task<List<UserResponse>> GetAllAsync()
