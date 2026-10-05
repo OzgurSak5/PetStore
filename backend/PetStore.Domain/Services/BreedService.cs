@@ -9,11 +9,64 @@ public class BreedService : IBreedService
 {
     private readonly IBreedRepository _breedRepository;
     private readonly ISpeciesRepository _speciesRepository;
+    private readonly IPetRepository _petRepository;
 
-    public BreedService(IBreedRepository breedRepository, ISpeciesRepository speciesRepository)
+    public BreedService(IBreedRepository breedRepository, ISpeciesRepository speciesRepository, IPetRepository petRepository)
     {
         _breedRepository = breedRepository;
         _speciesRepository = speciesRepository;
+        _petRepository = petRepository;
+    }
+
+    public async Task<BreedResponse> UpdateAsync(int id, UpdateBreedRequest request)
+    {
+        var breed = await _breedRepository.GetByIdAsync(id);
+
+        if (breed == null)
+        {
+            throw new NotFoundException("Breed not found.");
+        }
+
+        var species = await _speciesRepository.GetByIdAsync(request.SpeciesId);
+
+        if (species == null)
+        {
+            throw new ValidationException("Species not found.");
+        }
+
+        breed.Name = request.Name;
+        breed.SpeciesId = request.SpeciesId;
+        breed.EnergyLevel = request.EnergyLevel;
+        breed.NoiseLevel = request.NoiseLevel;
+        breed.SpaceRequirements = request.SpaceRequirement;
+        breed.AppetiteLevel = request.AppetiteLevel;
+        breed.GoodWithChildren = request.GoodWithChildren;
+        breed.GoodWithOtherPets = request.GoodWithOtherPets;
+        breed.GroomingNeeds = request.GroomingNeed;
+
+        await _breedRepository.UpdateAsync(breed);
+
+        var updatedBreed = await _breedRepository.GetByIdAsync(id);
+        return MapToResponse(updatedBreed!);    
+    }
+
+    public async Task DeleteAsync(int id)
+    {
+        var breed = await _breedRepository.GetByIdAsync(id);
+
+        if (breed == null)
+        {
+            throw new NotFoundException("Breed not found.");
+        }
+
+        var hasPets = await _petRepository.ExistsByBreedIdAsync(id);
+
+        if (hasPets)
+        {
+            throw new ConflictException("Cannot delete breed with associated pets.");
+        }
+
+        await _breedRepository.DeleteAsync(breed);
     }
 
     public async Task<List<BreedResponse>> GetAllAsync()

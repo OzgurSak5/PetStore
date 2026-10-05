@@ -8,4 +8,5 @@ public interface IPetRepository
     Task<Pet?> GetByIdAsync(int id);
     Task<Pet> AddAsync(Pet pet);
     Task UpdateAsync(Pet pet);
+    Task<bool> ExistsByBreedIdAsync(int breedId);
 }

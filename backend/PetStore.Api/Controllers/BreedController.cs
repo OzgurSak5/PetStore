@@ -16,6 +16,27 @@ public class BreedController : ControllerBase
         _breedService = breedService;
     }
 
+    [HttpPut("{id}")]
+    [ProducesResponseType<BreedResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Update(int id, [FromBody] UpdateBreedRequest request)
+    {
+        var updatedBreed = await _breedService.UpdateAsync(id, request);
+        return Ok(updatedBreed);
+    }
+
+    [HttpDelete("{id}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Delete(int id)
+    {
+        await _breedService.DeleteAsync(id);
+        return NoContent();
+    }
+
+
     [HttpGet]
     [ProducesResponseType<List<BreedResponse>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAll()

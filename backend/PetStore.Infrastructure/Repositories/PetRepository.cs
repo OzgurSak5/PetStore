@@ -13,6 +13,11 @@ public class PetRepository : IPetRepository
     {
         _context = context;
     }
+    
+    public async Task<bool> ExistsByBreedIdAsync(int breedId)
+    {
+        return await _context.Pets.AnyAsync(p => p.BreedId == breedId);
+    }
 
     public async Task<List<Pet>> GetAllAsync()
     {

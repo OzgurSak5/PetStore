@@ -14,6 +14,18 @@ public class BreedRepository : IBreedRepository
         _context = context;
     }
 
+    public async Task UpdateAsync(Breed breed)
+    {
+        _context.Breeds.Update(breed);
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task DeleteAsync(Breed breed)
+    {
+        _context.Breeds.Remove(breed);
+        await _context.SaveChangesAsync();
+    }
+
     public async Task<bool> ExistsBySpeciesIdAsync(int speciesId)
     {
         return await _context.Breeds.AnyAsync(b => b.SpeciesId == speciesId);
