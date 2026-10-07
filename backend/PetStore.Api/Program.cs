@@ -42,4 +42,11 @@ app.UseHttpsRedirection();
 
 app.MapControllers();
 
+if (app.Environment.IsDevelopment())
+{
+    using var scope = app.Services.CreateScope();
+    var context = scope.ServiceProvider.GetRequiredService<PetStoreDbContext>();
+    await DatabaseSeeder.SeedAsync(context);
+}
+
 app.Run();
