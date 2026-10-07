@@ -80,8 +80,9 @@ false` ne anlama gelir?) tercih edilmedi.
 
 ## 6. Satılan kayıtlar silinmiyor
 
-**Karar:** Pet kayıtları fiziksel olarak silinmez, `Status` değeri
-değiştirilir.
+**Karar:** Pet kayıtları fiziksel olarak silinmez. Satış gerçekleştiğinde
+Status değeri Sold olur; kaydın listelerden kaldırılması gerektiğinde ayrı
+bir IsDeleted bayrağı işaretlenir (bkz. madde 18).
 
 **Gerekçe:** Soft delete yapılması genel anlamda hem admin tarafından
 tüm hayvanlar için görülebilir ve ulaşılabilir olur. Kayıtları sürekli
@@ -239,3 +240,136 @@ yoldu.
 öncesinde elle `UPDATE` ifadeleri eklenerek mevcut değerlerin karşılıkları yazılmalıdır.
 Tip değiştiren her migration'ın mevcut veriyi nasıl etkilediği uygulamadan önce
 incelenmelidir.
+
+---
+
+## 17. Seçici soft delete
+
+**Karar:** Silme davranışı entity'nin rolüne göre farklılaşıyor. `Pet` ve `User`
+kayıtları `IsDeleted` bayrağıyla işaretleniyor, fiziksel olarak silinmiyor.
+`Species` ve `Breed` gerçek anlamda siliniyor, ancak bağlı kayıt varsa işlem
+engelleniyor. `Favorite` ve `PetPhoto` için gerçek silme uygun; `Order` ve
+`OrderItem` hiçbir koşulda silinmiyor.
+
+**Gerekçe:** Soft delete uyguladığım tablolar başka tablolar tarafından referans
+veriliyor. Pet kaydını silersem OrderItem ve Favorite üzerinden kurulan bağlar
+kırılır, satış geçmişi anlamsızlaşır. User için de aynısı geçerli — bir kullanıcı
+hesabını kapatsa bile verdiği siparişlerin sahibi belli kalmalı. Species ve Breed
+ise referans kataloğu; bunlar zaten nadiren siliniyor ve bağlı kayıt varken 
+silinmeleri engellendiği için geçmişi bozma riski yok.
+
+**Alternatif:** Tüm tablolara soft delete uygulamak. Tutarlı görünür ancak her
+entity'nin rolü farklı — bir favoriyi kaldırmak gerçekten kaldırmak demektir,
+geçmişte saklanacak bir bilgi taşımaz. Tek kuralı her yere uygulamak yapay bir
+tutarlılık üretirdi.
+
+---
+
+## 18. `Pet.Status` ile `IsDeleted` ayrı alanlar
+
+**Karar:** Soft delete için `PetStatus` enum'una yeni bir değer eklenmedi; ayrı
+bir `IsDeleted` bayrağı tanımlandı.
+
+**Gerekçe:** Bunlar iki ayrı bilgi. Status hayvanın gerçek durumunu anlatıyor
+satışa hazır mı, rezerve mi, tedavide mi, satıldı mı. IsDeleted ise kaydın
+listelerde görünüp görünmeyeceğini belirliyor. İkisi birbirinden bağımsız:
+satılmış bir kaydı da kaldırabilmeliyim, satışa hazır bir kaydı da.
+Enum'a Removed eklesem, bir hayvanın hem satılmış hem kaldırılmış olduğunu ifade edemezdim.
+
+**Alternatif:** `PetStatus` enum'una `Removed` değeri eklemek. Tek alanla
+yönetilirdi, ancak hayvanın gerçek durumu ile kaydın görünürlüğü farklı iki
+bilgi — satılmış bir kayıt da listeden kaldırılabilir, satışa hazır bir kayıt da.
+Tek alana sıkıştırmak bu ayrımı kaybediyordu.
+
+---
+
+## 19. Soft delete filtresi `DbContext` seviyesinde tanımlı
+
+**Karar:** `Pet` ve `User` için `HasQueryFilter` ile global sorgu filtresi
+tanımlandı. Repository metotlarında ayrıca `Where(x => !x.IsDeleted)` koşulu
+yazılmıyor.
+
+**Gerekçe:** Filtre tek noktada tanımlandığı için yeni bir sorgu yazarken
+unutulma riski ortadan kalkıyor. Silinmiş kayıtlara kasten erişmek gerektiğinde
+(raporlama, yönetim ekranı) `IgnoreQueryFilters()` ile filtre devre dışı
+bırakılabiliyor — yani varsayılan güvenli, istisna açık şekilde belirtiliyor.
+
+**Not:** Filtrenin etkisi `GetByIdAsync` için de geçerli olduğundan, silinmiş bir
+kayıt üzerinde güncelleme veya tekrar silme denemesi `404` döndürüyor. Bu
+davranış ayrıca kodlanmadı, filtrenin doğal sonucu.
+
+---
+
+## 20. İlişkisel kısıtlar için `409 Conflict`
+
+**Karar:** Bağlı kaydı olan bir `Species` veya `Breed` silinmeye çalışıldığında
+`ConflictException` fırlatılıyor ve istemciye `409 Conflict` dönüyor. Kontrol
+servis katmanında, silme işleminden önce yapılıyor.
+
+**Gerekçe:** Kontrolü kendim yaptığım için hangi durumda ne fırlatacağımı önceden
+biliyorum ve istemciye anlamlı bir mesaj verebiliyorum. Veritabanının foreign key
+hatasına bıraksaydım, o hata GlobalExceptionHandler'da tanınmayan bir tip olarak 500'e
+düşerdi ve kullanıcı "An unexpected error occurred." görürdü — oysa sorun sunucuda değil,
+silmeye çalıştığı kaydın bağlı kayıtları olmasında.
+
+**Alternatif:** Veritabanının foreign key hatasını (`DbUpdateException`) yakalayıp
+çevirmek. Fazladan sorgu gerektirmez, ancak hata mesajı veritabanı kısıt adından
+türetilmek zorunda kalır ve istemciye anlamlı bir açıklama üretmek zorlaşır.
+
+**Neden `400` değil:** İstek gövdesi geçerli, istemcinin düzeltebileceği bir
+girdi hatası yok. Engelleyen şey kaynağın o anki durumu — `409` tam olarak bu
+durumu ifade ediyor.
+
+---
+
+## 21. Doğrulama iki katmanda yapılıyor
+
+**Karar:** Biçim ve aralık kuralları DTO'larda Data Annotations ile tanımlanıyor
+(`Required`, `StringLength`, `Range`, `EmailAddress`). Bağlam gerektiren kurallar
+servis katmanında kontrol ediliyor — var olmayan `BreedId`, gelecek bir
+`BirthDate`, bağlı kaydı olan bir türün silinmesi.
+
+**Gerekçe:** Gerekçe: DTO'daki attribute'lar yalnızca derleme zamanı sabitleri
+alabiliyor; [Range(1, 5)] yazabiliyorum ama,
+"bu BreedId veritabanında var mı" ya da "bu tarih bugünden sonra mı" diye soramıyorum.
+Bu yüzden ayrım şuraya düşüyor: veri tek başına bakılarak doğrulanabiliyorsa DTO'da,
+dış bir şeye (veritabanı, bugünün tarihi) bakmak gerekiyorsa serviste. Pratik faydası da var.
+Attribute'lar controller'a hiç ulaşmadan çalışıyor, geçersiz bir istek veritabanına
+dokunmadan reddediliyor.
+
+**Sonuç:** İki mekanizma iki farklı cevap biçimi üretiyor. Data Annotations
+ihlalleri `ValidationProblemDetails` döndürüyor ve hatalar alan bazında
+`errors` nesnesinde gruplanıyor; servis katmanı hataları `GlobalExceptionHandler`
+üzerinden geçip `detail` alanında tek bir mesaj taşıyor. İkisi de `400` ancak
+şekilleri farklı — istemci her iki biçimi de ele almak durumunda.
+
+---
+
+## 22. Positional record'larda doğrulama attribute'ları
+
+**Karar:** DTO'lardaki doğrulama attribute'ları `[property:]` öneki olmadan,
+doğrudan constructor parametresine yazılıyor.
+
+**Gerekçe:** ASP.NET Core model doğrulaması attribute'ları constructor
+parametresinde arıyor. `[property:]` ile property'ye yönlendirildiğinde
+doğrulama çalışmıyor ve ASP.NET Core bu durumu çalışma zamanında
+`InvalidOperationException` ile bildiriyor — istek `500` dönüyor.
+
+**Not:** Hata derleme aşamasında yakalanmıyor; yalnızca o endpoint'e istek
+geldiğinde ortaya çıkıyor. Attribute eklenen her DTO için en az bir çağrı
+yapılarak doğrulanması gerekiyor.
+
+---
+
+## 23. Kendi exception tiplerinin isim benzerliği
+
+**Not:** Projede tanımlı `NotFoundException` ve `ValidationException` tipleri,
+.NET'in kendi `KeyNotFoundException` ve
+`System.ComponentModel.DataAnnotations.ValidationException` tipleriyle
+karışabiliyor. Yanlış tip kullanıldığında derleme hatası oluşmuyor;
+`GlobalExceptionHandler` o tipi tanımadığı için istek `500` dönüyor ve hata
+mesajı istemciye ulaşmıyor.
+
+Yeni bir exception fırlatırken `using PetStore.Domain.Exceptions;` satırının
+mevcut olduğundan ve IDE'nin otomatik tamamlamasının doğru tipi seçtiğinden emin
+olunmalı.
