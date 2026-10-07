@@ -47,7 +47,7 @@ public class BreedService : IBreedService
         await _breedRepository.UpdateAsync(breed);
 
         var updatedBreed = await _breedRepository.GetByIdAsync(id);
-        return MapToResponse(updatedBreed!);    
+        return MapToResponse(updatedBreed!);
     }
 
     public async Task DeleteAsync(int id)
@@ -69,10 +69,18 @@ public class BreedService : IBreedService
         await _breedRepository.DeleteAsync(breed);
     }
 
-    public async Task<List<BreedResponse>> GetAllAsync()
+    public async Task<PagedResult<BreedResponse>> GetPagedAsync(BreedQueryParameters parameters)
     {
-        var breeds = await _breedRepository.GetAllAsync();
-        return breeds.Select(MapToResponse).ToList();
+        var (breeds, totalCount) = await _breedRepository.GetPagedAsync(parameters);
+
+        var items = breeds.Select(MapToResponse).ToList();
+
+        return new PagedResult<BreedResponse>(
+            Items: items,
+            PageNumber: parameters.PageNumber,
+            PageSize: parameters.PageSize,
+            TotalCount: totalCount
+        );
     }
 
     public async Task<BreedResponse?> GetByIdAsync(int id)

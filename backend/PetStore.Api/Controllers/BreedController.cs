@@ -38,10 +38,10 @@ public class BreedController : ControllerBase
 
 
     [HttpGet]
-    [ProducesResponseType<List<BreedResponse>>(StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetAll()
+    [ProducesResponseType<PagedResult<BreedResponse>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAll([FromQuery] BreedQueryParameters parameters)
     {
-        var breeds = await _breedService.GetAllAsync();
+        var breeds = await _breedService.GetPagedAsync(parameters);
         return Ok(breeds);
     }
 
