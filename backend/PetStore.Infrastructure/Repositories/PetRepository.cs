@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PetStore.Domain.Entities;
 using PetStore.Domain.Interfaces;
 using PetStore.Infrastructure.Data;
+using PetStore.Domain.DTOs;
 
 namespace PetStore.Infrastructure.Repositories;
 
@@ -13,15 +14,41 @@ public class PetRepository : IPetRepository
     {
         _context = context;
     }
+
+    public async Task<(List<Pet> Items, int TotalCount)> GetPagedAsync(PetQueryParameters parameters)
+    {
+        var query = _context.Pets.Include(p => p.Breed).ThenInclude(b => b.Species).AsQueryable();
+
+        if (parameters.Status.HasValue)
+        {
+            query = query.Where(p => p.Status == parameters.Status.Value);
+        }
+
+        if (parameters.BreedId.HasValue)
+        {
+            query = query.Where(p => p.BreedId == parameters.BreedId.Value);
+        }
+
+        if (parameters.SpeciesId.HasValue)
+        {
+            query = query.Where(p => p.Breed.SpeciesId == parameters.SpeciesId.Value);
+        }
+
+        if (!string.IsNullOrEmpty(parameters.Search))
+        {
+            query = query.Where(p => EF.Functions.ILike(p.Name, $"%{parameters.Search}%"));
+        }
+
+        var totalCount = await query.CountAsync();
+        var items = await query.OrderByDescending(p => p.CreatedAt)
+            .Skip((parameters.PageNumber - 1) * parameters.PageSize).Take(parameters.PageSize).ToListAsync();
+
+        return (items, totalCount);
+    }
     
     public async Task<bool> ExistsByBreedIdAsync(int breedId)
     {
         return await _context.Pets.AnyAsync(p => p.BreedId == breedId);
-    }
-
-    public async Task<List<Pet>> GetAllAsync()
-    {
-        return await _context.Pets.Include(p => p.Breed).ThenInclude(b => b.Species).ToListAsync();
     }
 
     public async Task<Pet?> GetByIdAsync(int id)

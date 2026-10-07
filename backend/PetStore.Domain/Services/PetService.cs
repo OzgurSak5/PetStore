@@ -17,6 +17,20 @@ public class PetService : IPetService
         _breedRepository = breedRepository;
     }
 
+    public async Task<PagedResult<PetResponse>> GetPagedAsync(PetQueryParameters parameters)
+    {
+        var (pets, totalCount) = await _petRepository.GetPagedAsync(parameters);
+
+        var items = pets.Select(MapToResponse).ToList();
+
+        return new PagedResult<PetResponse>(
+            Items: items,
+            PageNumber: parameters.PageNumber,
+            PageSize: parameters.PageSize,
+            TotalCount: totalCount
+        );
+    }
+
     public async Task<PetResponse> UpdateAsync(int id, UpdatePetRequest request)
     {
         var pet = await _petRepository.GetByIdAsync(id);
@@ -65,12 +79,6 @@ public class PetService : IPetService
         pet.UpdatedAt = DateTime.UtcNow;
 
         await _petRepository.UpdateAsync(pet);
-    }
-
-    public async Task<List<PetResponse>> GetAllAsync()
-    {
-        var pets = await _petRepository.GetAllAsync();
-        return pets.Select(MapToResponse).ToList();
     }
 
     public async Task<PetResponse?> GetByIdAsync(int id)

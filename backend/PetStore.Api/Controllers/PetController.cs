@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using PetStore.Domain.Interfaces;
 using PetStore.Domain.DTOs;
 
+
 namespace PetStore.Api.Controllers;
 
 [ApiController]
@@ -36,10 +37,10 @@ public class PetController : ControllerBase
     }
 
     [HttpGet]
-    [ProducesResponseType<List<PetResponse>>(StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetAll()
+    [ProducesResponseType<PagedResult<PetResponse>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAll([FromQuery] PetQueryParameters parameters)
     {
-        var pets = await _petService.GetAllAsync();
+        var pets = await _petService.GetPagedAsync(parameters);
         return Ok(pets);
     }
 
