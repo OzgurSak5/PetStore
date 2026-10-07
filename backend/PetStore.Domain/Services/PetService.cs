@@ -33,6 +33,11 @@ public class PetService : IPetService
             throw new ValidationException("Breed not found.");
         }
 
+        if (request.BirthDate > DateOnly.FromDateTime(DateTime.UtcNow))
+        {
+            throw new ValidationException("Birth date cannot be in the future.");
+        }
+
         pet.Name = request.Name;
         pet.BreedId = request.BreedId;
         pet.BirthDate = request.BirthDate;
@@ -83,6 +88,11 @@ public class PetService : IPetService
             throw new ValidationException("Breed not found.");
         }
 
+        if (request.BirthDate > DateOnly.FromDateTime(DateTime.UtcNow))
+        {
+            throw new ValidationException("Birth date cannot be in the future.");
+        }
+
         var pet = new Pet
         {
             Name = request.Name,
@@ -101,7 +111,7 @@ public class PetService : IPetService
         var createdPet = await _petRepository.GetByIdAsync(pet.Id);
         return MapToResponse(createdPet!);
     }
-    
+
     private static PetResponse MapToResponse(Pet pet)
     {
         return new PetResponse(

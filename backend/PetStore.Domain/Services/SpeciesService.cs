@@ -16,7 +16,7 @@ public class SpeciesService : ISpeciesService
         _breedRepository = breedRepository;
     }
 
-    public async Task<SpeciesResponse> UpdateAsync(int id, string name)
+    public async Task<SpeciesResponse> UpdateAsync(int id, UpdateSpeciesRequest request)
     {
         var species = await _speciesRepository.GetByIdAsync(id);
 
@@ -25,7 +25,7 @@ public class SpeciesService : ISpeciesService
             throw new NotFoundException("Species not found.");
         }
 
-        species.Name = name;
+        species.Name = request.Name;
         await _speciesRepository.UpdateAsync(species);
 
         return MapToResponse(species);
@@ -35,7 +35,7 @@ public class SpeciesService : ISpeciesService
     {
         var species = await _speciesRepository.GetByIdAsync(id);
 
-        if(species == null)
+        if (species == null)
         {
             throw new NotFoundException("Species not found.");
         }
@@ -61,9 +61,9 @@ public class SpeciesService : ISpeciesService
         return species != null ? MapToResponse(species) : null;
     }
 
-    public async Task<SpeciesResponse> CreateAsync(string name)
+    public async Task<SpeciesResponse> CreateAsync(CreateSpeciesRequest request)
     {
-        var species = new Species { Name = name };
+        var species = new Species { Name = request.Name };
         var createdSpecies = await _speciesRepository.AddAsync(species);
         return MapToResponse(createdSpecies);
     }

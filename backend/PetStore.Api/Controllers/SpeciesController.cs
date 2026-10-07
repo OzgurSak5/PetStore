@@ -18,21 +18,22 @@ public class SpeciesController : ControllerBase
 
     [HttpPut("{id}")]
     [ProducesResponseType<SpeciesResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Update(int id, [FromBody] string name)
+    public async Task<IActionResult> Update(int id, [FromBody] UpdateSpeciesRequest request)
     {
-        var species = await _speciesService.UpdateAsync(id, name);
+        var species = await _speciesService.UpdateAsync(id, request);
         return Ok(species);
     }
 
     [HttpDelete("{id}")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Delete(int id)
     {
         await _speciesService.DeleteAsync(id);
-        return Ok();
+        return NoContent();
     }
 
     [HttpGet]
@@ -58,9 +59,10 @@ public class SpeciesController : ControllerBase
 
     [HttpPost]
     [ProducesResponseType<SpeciesResponse>(StatusCodes.Status201Created)]
-    public async Task<IActionResult> Create([FromBody] string name)
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Create([FromBody] CreateSpeciesRequest request)
     {
-        var species = await _speciesService.CreateAsync(name);
+        var species = await _speciesService.CreateAsync(request);
         return CreatedAtAction(nameof(GetById), new { id = species.Id }, species);
     }
 }

@@ -1,5 +1,6 @@
 using PetStore.Domain.DTOs;
 using PetStore.Domain.Enums;
+using System.ComponentModel.DataAnnotations;
 
 namespace PetStore.Domain.Interfaces;
 
@@ -14,12 +15,23 @@ public interface IUserService
 }
 
 public record CreateUserRequest(
+    [Required]
+    [EmailAddress]
+    [StringLength(255)]
     string Email,
+
+    [Required]
+    [StringLength(255, MinimumLength = 8)]
     string Password,
+
     UserRole Role
 );
 
 public record UpdateUserRequest(
+    [Required]
+    [EmailAddress]
+    [StringLength(255)]
     string Email,
+
     UserRole Role
 );
