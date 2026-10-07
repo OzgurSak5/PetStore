@@ -13,7 +13,7 @@ reference specification.
 
 | Component | Status |
 |---|---|
-| Backend API | In progress — Species, Breed, User and Pet resources working |
+| Backend API | In progress — full CRUD for Species, Breed, User and Pet |
 | Web (React) | Planned |
 | AI Service (FastAPI + RAG) | Planned |
 | QA (API + E2E tests) | Planned |
@@ -25,7 +25,7 @@ reference specification.
 ```
 PetStore/
 ├── backend/          .NET 10 API (layered)
-│   ├── PetStore.Domain/           Entities, interfaces, services
+│   ├── PetStore.Domain/           Entities, interfaces, services, DTOs
 │   ├── PetStore.Infrastructure/   EF Core, DbContext, repositories
 │   ├── PetStore.Api/              Controllers, DI, Swagger
 │   └── PetStore.Tests/            xUnit
@@ -52,7 +52,8 @@ PetStore.Api              HTTP, controllers, Swagger
        ↓
 PetStore.Infrastructure   EF Core, DbContext, repository implementations
        ↓
-PetStore.Domain           Entities, business rules, repository/service interfaces
+PetStore.Domain           Entities, business rules, DTOs,
+                          repository/service interfaces
                           (references nothing)
 ```
 
@@ -63,7 +64,25 @@ Controller → Service → IRepository → Repository → DbContext → PostgreS
 ```
 
 Controllers never touch `DbContext` directly, and the service layer depends only on
-interfaces.
+interfaces. Services return DTOs rather than entities, so the database schema and the
+API contract can evolve independently.
+
+### Error handling
+
+A single `IExceptionHandler` translates domain exceptions into RFC 9457 Problem Details
+responses, so controllers contain no try/catch blocks:
+
+| Exception | Status | Raised when |
+|---|---|---|
+| `NotFoundException` | 404 | The requested record does not exist |
+| `ValidationException` | 400 | A referenced record is missing, or a value fails a contextual rule |
+| `ConflictException` | 409 | Deletion is blocked by dependent records |
+
+### Validation
+
+Format and range rules live on the DTOs as data annotations and are enforced before a
+request reaches the controller. Rules that need context — whether a `BreedId` exists,
+whether a birth date is in the future — are checked in the service layer.
 
 ---
 
@@ -122,26 +141,37 @@ dotnet run
 
 Swagger UI: `http://localhost:5087/swagger`
 
+On first run in the Development environment the application seeds a small set of sample
+species, breeds and pets, so the API is usable straight away. The seeder is skipped if
+the database already holds data.
+
 ---
 
 ## API
 
-Endpoints currently available:
+Every resource supports the same five operations:
 
-| Method | Route | Description |
+| Method | Route | Returns |
 |---|---|---|
-| GET | `/api/Species` | List species |
-| GET | `/api/Species/{id}` | Get one species |
-| POST | `/api/Species` | Create species |
-| GET | `/api/Breed` | List breeds |
-| GET | `/api/Breed/{id}` | Get one breed |
-| POST | `/api/Breed` | Create breed |
-| GET | `/api/Pet` | List pets |
-| GET | `/api/Pet/{id}` | Get one pet |
-| POST | `/api/Pet` | Create pet |
-| GET | `/api/User` | List users |
-| GET | `/api/User/{id}` | Get one user |
-| POST | `/api/User` | Create user |
+| GET | `/api/{resource}` | 200 — list |
+| GET | `/api/{resource}/{id}` | 200 — single record, 404 if missing |
+| POST | `/api/{resource}` | 201 — created record, 400 on invalid input |
+| PUT | `/api/{resource}/{id}` | 200 — updated record, 400 / 404 |
+| DELETE | `/api/{resource}/{id}` | 204, 404 if missing, 409 if dependents exist |
+
+Resources: `Species`, `Breed`, `Pet`, `User`.
+
+### Deletion semantics
+
+Deletion behaviour differs by entity, because the entities differ in role:
+
+`Pet` and `User` are soft-deleted — the row is flagged rather than removed, since
+`OrderItem` and `Favorite` reference pets and `Order` references users. A global query
+filter hides flagged rows from every query, so a deleted record returns 404 on any
+subsequent operation.
+
+`Species` and `Breed` are deleted for real, but the service checks for dependent records
+first and returns 409 rather than letting the database raise a foreign-key error.
 
 ---
 
@@ -150,7 +180,7 @@ Endpoints currently available:
 Eight tables: `Species`, `Breed`, `Pet`, `PetPhoto`, `User`, `Order`, `OrderItem`,
 `Favorite`.
 
-Two design decisions worth calling out:
+Three design decisions worth calling out:
 
 **Species and breed are separate levels.** The reference API models a single flat
 `Category`; this project splits it into `Species` and `Breed`. The reason is that the
@@ -163,17 +193,25 @@ attributes as numeric fields on a 1–5 scale: `EnergyLevel`, `NoiseLevel`,
 `GroomingNeed`. Numeric scales were chosen over free-text descriptions so the AI service
 can ground its recommendations in queryable data rather than interpreting prose.
 
+**Enums are stored as text.** `PetStatus`, `Gender`, `OrderStatus` and `UserRole` map to
+text columns rather than integers, so the database is readable on its own and inserting a
+new enum member cannot silently change what existing rows mean.
+
 Full decision log with alternatives considered: [`docs/decisions.md`](./docs/decisions.md)
 
 ---
 
 ## Roadmap
 
-- [ ] Response DTOs — stop exposing entities directly through the API
-- [ ] Centralised error handling (Problem Details / RFC 9457)
+- [x] Response DTOs — stop exposing entities directly through the API
+- [x] Centralised error handling (Problem Details / RFC 9457)
+- [x] Input validation
+- [x] Development seed data
+- [ ] Pagination, filtering and search
 - [ ] Remaining resources: `PetPhoto`, `Order`, `OrderItem`, `Favorite`
 - [ ] File upload for pet photos
 - [ ] JWT authentication
+- [ ] Dockerfile for the API itself
 - [ ] Complete the `docs/openapi.yaml` contract
 - [ ] React web client
 - [ ] AI service: `/generate-description`, `/recommend-pet`
