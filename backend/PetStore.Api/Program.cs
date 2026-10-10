@@ -4,12 +4,16 @@ using PetStore.Domain.Services;
 using PetStore.Infrastructure.Data;
 using PetStore.Infrastructure.Repositories;
 using PetStore.Api.Middleware;
+using PetStore.Domain.Settings;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddDbContext<PetStoreDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+builder.Services.Configure<OrderSettings>(
+    builder.Configuration.GetSection("OrderSettings"));
 
 builder.Services.AddScoped<ISpeciesRepository, SpeciesRepository>();
 builder.Services.AddScoped<ISpeciesService, SpeciesService>();
@@ -21,6 +25,7 @@ builder.Services.AddScoped<IPetRepository, PetRepository>();
 builder.Services.AddScoped<IPetService, PetService>();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
+
 
 builder.Services.AddControllers();
 

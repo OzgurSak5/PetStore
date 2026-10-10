@@ -17,6 +17,7 @@ public class Pet
     public DateTime UpdatedAt { get; set; }
     public DateOnly BirthDate { get; set; }
     public bool IsDeleted { get; set; }
+    public DateTime? ReservedUntil { get; set; }
 
     public ICollection<PetPhoto> PetPhotos { get; set; } = new List<PetPhoto>();
     public ICollection<OrderItem> OrderItems { get; set; } = new List<OrderItem>();

@@ -1,4 +1,4 @@
-namespace PetStore.Domain.Entities;
+namespace PetStore.Domain.Enums;
 
 public enum OrderStatus
 {
