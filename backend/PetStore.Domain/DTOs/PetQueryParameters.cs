@@ -22,4 +22,8 @@ public class PetQueryParameters
     public int? BreedId { get; set; }
     public int? SpeciesId { get; set; }
     public string? Search { get; set; }
+    public Gender? Gender { get; set; }
+    public decimal? MinPrice { get; set; }
+    public decimal? MaxPrice { get; set; }
+    public bool? IsVaccinated { get; set; }
 }

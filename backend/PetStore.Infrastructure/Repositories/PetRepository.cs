@@ -39,6 +39,26 @@ public class PetRepository : IPetRepository
             query = query.Where(p => EF.Functions.ILike(p.Name, $"%{parameters.Search}%"));
         }
 
+        if (parameters.Gender.HasValue)
+        {
+            query = query.Where(p => p.Gender == parameters.Gender.Value);
+        }
+
+        if (parameters.MinPrice.HasValue)
+        {
+            query = query.Where(p => p.Price >= parameters.MinPrice.Value);
+        }
+
+        if (parameters.MaxPrice.HasValue)
+        {
+            query = query.Where(p => p.Price <= parameters.MaxPrice.Value);
+        }
+
+        if (parameters.IsVaccinated.HasValue)
+        {
+            query = query.Where(p => p.IsVaccinated == parameters.IsVaccinated.Value);
+        }
+
         var totalCount = await query.CountAsync();
         var items = await query.OrderByDescending(p => p.CreatedAt)
             .Skip((parameters.PageNumber - 1) * parameters.PageSize).Take(parameters.PageSize).ToListAsync();
