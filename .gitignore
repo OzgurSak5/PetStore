@@ -495,3 +495,6 @@ venv/
 # Secrets
 .env.*
 !.env.example
+
+# Uploaded files
+backend/PetStore.Api/wwwroot/uploads/
