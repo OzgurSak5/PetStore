@@ -13,7 +13,7 @@ reference specification.
 
 | Component | Status |
 |---|---|
-| Backend API | In progress — full CRUD for Species, Breed, User and Pet |
+| Backend API | In progress — all eight resources implemented |
 | Web (React) | Planned |
 | AI Service (FastAPI + RAG) | Planned |
 | QA (API + E2E tests) | Planned |
@@ -76,13 +76,20 @@ responses, so controllers contain no try/catch blocks:
 |---|---|---|
 | `NotFoundException` | 404 | The requested record does not exist |
 | `ValidationException` | 400 | A referenced record is missing, or a value fails a contextual rule |
-| `ConflictException` | 409 | Deletion is blocked by dependent records |
+| `ConflictException` | 409 | The resource's current state blocks the operation |
 
 ### Validation
 
 Format and range rules live on the DTOs as data annotations and are enforced before a
 request reaches the controller. Rules that need context — whether a `BreedId` exists,
-whether a birth date is in the future — are checked in the service layer.
+whether a birth date is in the future, whether a pet is still available — are checked in
+the service layer.
+
+### Transactions
+
+Operations that span several tables are written in a single `SaveChangesAsync` call, so
+they either all commit or none do. Placing an order inserts one `Order` row, N
+`OrderItem` rows and updates N `Pet` rows atomically.
 
 ---
 
@@ -149,17 +156,55 @@ the database already holds data.
 
 ## API
 
-Every resource supports the same five operations:
+`Species`, `Breed`, `Pet` and `User` each support the same five operations:
 
 | Method | Route | Returns |
 |---|---|---|
-| GET | `/api/{resource}` | 200 — list |
+| GET | `/api/{resource}` | 200 — paged list |
 | GET | `/api/{resource}/{id}` | 200 — single record, 404 if missing |
 | POST | `/api/{resource}` | 201 — created record, 400 on invalid input |
 | PUT | `/api/{resource}/{id}` | 200 — updated record, 400 / 404 |
 | DELETE | `/api/{resource}/{id}` | 204, 404 if missing, 409 if dependents exist |
 
-Resources: `Species`, `Breed`, `Pet`, `User`.
+`GET /api/Pet` and `GET /api/Breed` accept filters alongside `pageNumber` and
+`pageSize`. Pets can be filtered by status, breed, species, gender, price range and
+vaccination, and searched by name. Breeds can be filtered by species and by their
+attribute scales — maximum energy, noise and space requirement, minimum
+child-friendliness. The breed filters are min/max rather than equality because a buyer
+asks for "a calm pet", not "a pet whose energy level is exactly 2". The same parameters
+will back the AI service's `recommend-pet` endpoint.
+
+### Orders
+
+| Method | Route | Description |
+|---|---|---|
+| GET | `/api/Order` | Paged list, optionally filtered by `userId` and `status` |
+| GET | `/api/Order/{id}` | Single order with its items |
+| POST | `/api/Order` | Place an order for one or more pets |
+| PUT | `/api/Order/{id}/pay` | Mark as paid — pets become `Sold` |
+| PUT | `/api/Order/{id}/cancel` | Cancel — pets return to `Available` |
+
+Placing an order reserves each pet (`Pending`) for a configurable window and freezes its
+price on the order item, so later price changes never alter past orders. Only orders in
+`Created` status can be paid or cancelled.
+
+### Favorites and pet photos
+
+Both are scoped to their parent resource, since neither exists on its own:
+
+```
+GET    /api/User/{userId}/favorites
+POST   /api/User/{userId}/favorites
+DELETE /api/User/{userId}/favorites/{petId}
+
+GET    /api/Pet/{petId}/photos
+POST   /api/Pet/{petId}/photos
+PUT    /api/Pet/{petId}/photos/{photoId}/primary
+DELETE /api/Pet/{petId}/photos/{photoId}
+```
+
+Exactly one photo per pet is marked primary. The first photo added becomes the cover
+automatically, and deleting the cover promotes the next one in sort order.
 
 ### Deletion semantics
 
@@ -173,6 +218,8 @@ subsequent operation.
 `Species` and `Breed` are deleted for real, but the service checks for dependent records
 first and returns 409 rather than letting the database raise a foreign-key error.
 
+`Favorite` and `PetPhoto` are deleted outright — there is no history worth preserving.
+
 ---
 
 ## Data Model
@@ -180,7 +227,7 @@ first and returns 409 rather than letting the database raise a foreign-key error
 Eight tables: `Species`, `Breed`, `Pet`, `PetPhoto`, `User`, `Order`, `OrderItem`,
 `Favorite`.
 
-Three design decisions worth calling out:
+Four design decisions worth calling out:
 
 **Species and breed are separate levels.** The reference API models a single flat
 `Category`; this project splits it into `Species` and `Breed`. The reason is that the
@@ -197,6 +244,10 @@ can ground its recommendations in queryable data rather than interpreting prose.
 text columns rather than integers, so the database is readable on its own and inserting a
 new enum member cannot silently change what existing rows mean.
 
+**Order item prices are frozen.** `OrderItem.Price` is a copy of `Pet.Price` taken when
+the order is placed. Without it, repricing a pet would retroactively change the total of
+every past order that included it.
+
 Full decision log with alternatives considered: [`docs/decisions.md`](./docs/decisions.md)
 
 ---
@@ -207,9 +258,10 @@ Full decision log with alternatives considered: [`docs/decisions.md`](./docs/dec
 - [x] Centralised error handling (Problem Details / RFC 9457)
 - [x] Input validation
 - [x] Development seed data
-- [ ] Pagination, filtering and search
-- [ ] Remaining resources: `PetPhoto`, `Order`, `OrderItem`, `Favorite`
+- [x] Pagination, filtering and search
+- [x] Remaining resources: `PetPhoto`, `Order`, `OrderItem`, `Favorite`
 - [ ] File upload for pet photos
+- [ ] Background service to release expired reservations
 - [ ] JWT authentication
 - [ ] Dockerfile for the API itself
 - [ ] Complete the `docs/openapi.yaml` contract

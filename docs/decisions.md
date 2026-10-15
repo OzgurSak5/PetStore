@@ -373,3 +373,136 @@ mesajı istemciye ulaşmıyor.
 Yeni bir exception fırlatırken `using PetStore.Domain.Exceptions;` satırının
 mevcut olduğundan ve IDE'nin otomatik tamamlamasının doğru tipi seçtiğinden emin
 olunmalı.
+
+---
+
+## 24. Sipariş işlemleri tek bir `SaveChangesAsync` ile kaydediliyor
+
+**Karar:** Sipariş oluşturulurken `Order` kaydı, `OrderItem` kayıtları ve `Pet`
+güncellemeleri tek bir `SaveChangesAsync` çağrısıyla yazılıyor. Açık transaction
+kullanılmadı.
+
+**Gerekçe:** EF Core `SaveChangesAsync`'i zaten transaction içinde çalıştırıyor, yani
+o çağrıya kadar biriken her şey ya hep birlikte yazılıyor ya hiç yazılmıyor. Sipariş
+akışında dört işlem birbirine bağlı; biri yazılıp diğeri yazılmazsa hayvanlar rezerve
+görünürken sipariş toplamı eksik kalabilir.
+
+`OrderItem`'lar `order.OrderItems` koleksiyonuna eklendiği için EF Core sıralamayı
+kendisi çözüyor — önce `Order`'ı yazıp `Id`'yi alıyor, sonra kalemlere işliyor. `Pet`
+güncellemeleri ise değişiklik takibi üzerinden yakalanıyor; nesneler aynı `DbContext`
+üzerinden okunduğu için alan ataması yapmak yeterli.
+
+**Alternatif:** `BeginTransactionAsync` ile açık transaction. Birden fazla
+`SaveChangesAsync` gerektiğinde zorunlu ama burada tek çağrı yettiği için gereksiz
+karmaşıklık olurdu.
+
+---
+
+## 25. Doğrulamalar veri değişikliğinden önce yapılıyor
+
+**Karar:** Servis metotlarında önce bütün kontroller yapılıyor, sonra değişikliklere
+geçiliyor.
+
+**Gerekçe:** Kontrol ve değişiklik iç içe olursa, listenin ortasında hata çıktığında
+önceki elemanlarda yapılan değişiklikler yarım kalıyor. Bu akışta `SaveChangesAsync`'e
+ulaşılmadığı için veritabanına yansımıyor ama araya başka bir kayıt girerse sorun
+olurdu. Ayırmak hem güvenli hem metodu okumayı kolaylaştırıyor.
+
+---
+
+## 26. Sipariş durumları tek yönlü
+
+**Karar:** `Created` tek giriş durumu, oradan `Paid` veya `Cancelled`'a geçiliyor. Bu
+ikisi son durum. Her iki geçiş de sadece `Created` durumundaki siparişlerde çalışıyor,
+değilse `409 Conflict` dönüyor.
+
+**Gerekçe:** Kontrolü sadece "zaten iptal edilmiş mi" diye yazdığımda ödenmiş siparişi
+de iptal edebiliyordum, o zaman satılmış hayvanlar tekrar `Available` oluyordu. Geçişi
+`Created` ile sınırlayınca bu kapandı.
+
+**Kapsam dışı:** İade akışı v1'e alınmadı. Eklenirse `Cancelled`'dan ayrı bir
+`Refunded` durumu olmalı — iptal ile iade farklı şeyler.
+
+---
+
+## 27. Hayvan durumu siparişin durumunu takip ediyor
+
+**Karar:** Sipariş `Created` olduğunda hayvanlar `Pending`, `Paid` olduğunda `Sold`,
+`Cancelled` olduğunda `Available` oluyor.
+
+**Gerekçe:** Sipariş oluştuğu anda hayvan rezerve edilmezse iki kullanıcı aynı hayvanı
+aynı anda sipariş edebilir. Sipariş oluştururken yapılan `Status != Available` kontrolü
+bunu engelliyor.
+
+---
+
+## 28. Rezervasyon süresi yapılandırmadan okunuyor
+
+**Karar:** `Pet` tablosuna `ReservedUntil` alanı eklendi. Sipariş oluşturulduğunda
+`UtcNow + ReservationMinutes` değeriyle doluyor, hayvan `Sold` veya `Available` olunca
+`null`'a çekiliyor. Süre `appsettings.json`'dan okunuyor, servise `IOptions<OrderSettings>`
+ile taşınıyor.
+
+**Gerekçe:** Süreyi koda gömsem geliştirme ve üretimde farklı değer kullanamazdım.
+Yapılandırmadan okuyunca `appsettings.Development.json`'da 2 dakika, üretimde 15 dakika
+yazabiliyorum — kod değiştirmeden.
+
+**Eksik:** Süresi dolan rezervasyonları serbest bırakan kod henüz yok. `ReservedUntil`
+şu an sadece yazılıyor, okunmuyor. Bunun için düzenli çalışan bir arka plan servisi
+gerekiyor, ayrı bir adım olarak ele alınacak.
+
+---
+
+## 29. `Favorite` kullanıcının alt kaynağı
+
+**Karar:** Rotalar `/api/User/{userId}/favorites` altında toplandı, kod ayrı bir
+`FavoriteController`'da.
+
+**Gerekçe:** Favori bağımsız bir kaynak değil, hep bir kullanıcıya ait. Rota bunu
+yansıtınca silme de sadeleşiyor: `DELETE /api/User/2/favorites/3` yeterli, gövdeye
+gerek kalmıyor. Düz `/api/Favorite` olsaydı iki id'yi gövdede ya da sorgu dizesinde
+taşımak gerekirdi.
+
+**Not:** `PUT` yok, çünkü favori ya var ya yok — güncellenecek bir alanı yok.
+
+---
+
+## 30. Global sorgu filtresi `Include` ile gelen varlıklara uygulanmıyor
+
+**Not:** `Pet` üzerindeki `HasQueryFilter(p => !p.IsDeleted)` sadece sorgunun kök
+varlığı `Pet` olduğunda çalışıyor. `Favorite` üzerinden `Include(f => f.Pet)` ile
+yüklendiğinde devreye girmiyor, silinmiş hayvan favori listesinde görünebiliyor.
+
+Bu yüzden `FavoriteRepository`'de koşul elle yazıldı:
+
+```csharp
+.Where(f => f.UserId == userId && !f.Pet.IsDeleted)
+```
+
+Soft delete uygulanan bir varlığa `Include` ile erişen her sorguda bu kontrolü elle
+eklemek gerekiyor.
+
+---
+
+## 31. Kapak fotoğrafı kuralları servis katmanında
+
+**Karar:** Bir hayvanın en fazla bir kapak fotoğrafı olabiliyor. Üç yerde uygulanıyor:
+yeni fotoğraf `IsPrimary: true` ile eklenince eski kapak temizleniyor; ilk fotoğraf
+`IsPrimary: false` gelse bile kapak yapılıyor; kapak silinince `SortOrder`'ı en küçük
+olan otomatik kapak oluyor.
+
+**Gerekçe:** Tek fotoğrafı olan bir hayvanın kapaksız kalması anlamsız, kapak silinince
+de hayvanın kapaksız kalmaması lazım. Bu kuralları veritabanında koşullu indeksle
+yazmak mümkündü ama migration'a elle SQL eklemek gerekirdi ve hata mesajı istemciye
+anlamlı gitmezdi.
+
+---
+
+## 32. `SortOrder` istemciden alınmıyor
+
+**Karar:** Yeni fotoğrafın `SortOrder` değeri, o hayvanın mevcut en büyük değerinin bir
+fazlası olarak serviste hesaplanıyor. `AddPetPhotoRequest`'te bu alan yok.
+
+**Gerekçe:** İstemciye bıraksam aynı sıraya birden fazla fotoğraf düşebilir ya da
+boşluk oluşabilirdi. Aynı mantık `Pet` oluştururken `Status` ve `CreatedAt` alanlarını
+DTO'ya koymamakla aynı — sistemin belirlemesi gereken değerler dışarıdan alınmıyor.
