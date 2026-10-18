@@ -16,6 +16,17 @@ public class PetPhotoController : ControllerBase
         _petPhotoService = petPhotoService;
     }
 
+    [HttpPost("upload")]
+    [ProducesResponseType<PetPhotoResponse>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Upload(int petId, [FromForm] UploadPetPhotoRequest request)
+    {
+        var petPhoto = await _petPhotoService.UploadAsync(petId, request.File, request.IsPrimary);
+        return CreatedAtAction(nameof(GetAll), new { petId }, petPhoto);
+    }
+
+
     [HttpGet]
     [ProducesResponseType<List<PetPhotoResponse>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
