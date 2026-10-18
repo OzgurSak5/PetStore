@@ -3,6 +3,7 @@ using PetStore.Domain.DTOs;
 using PetStore.Domain.Entities;
 using PetStore.Domain.Interfaces;
 using PetStore.Infrastructure.Data;
+using PetStore.Domain.Enums;
 
 namespace PetStore.Infrastructure.Repositories;
 
@@ -13,6 +14,19 @@ public class OrderRepository : IOrderRepository
     public OrderRepository(PetStoreDbContext context)
     {
         _context = context;
+    }
+
+    public async Task<List<Order>> GetExpiredReservationsAsync()
+    {
+        var now = DateTime.UtcNow;
+
+        return await _context.Orders
+            .Include(o => o.OrderItems)
+                .ThenInclude(oi => oi.Pet)
+            .Where(o => o.Status == OrderStatus.Created
+                     && o.OrderItems.Any(oi => oi.Pet.ReservedUntil != null
+                                            && oi.Pet.ReservedUntil < now))
+            .ToListAsync();
     }
 
     public async Task<Order?> GetByIdAsync(int id)

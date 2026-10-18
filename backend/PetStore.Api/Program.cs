@@ -6,6 +6,7 @@ using PetStore.Infrastructure.Repositories;
 using PetStore.Api.Middleware;
 using PetStore.Domain.Settings;
 using PetStore.Infrastructure.Storage;
+using PetStore.Api.BackgroundServices;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -34,6 +35,7 @@ builder.Services.AddScoped<IFavoriteService, FavoriteService>();
 builder.Services.AddScoped<IPetPhotoRepository, PetPhotoRepository>();
 builder.Services.AddScoped<IPetPhotoService, PetPhotoService>();
 builder.Services.AddScoped<IFileStorageService, FileStorageService>();
+builder.Services.AddHostedService<ReservationCleanupService>();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
 

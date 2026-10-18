@@ -10,6 +10,7 @@ public interface IOrderService
     Task<OrderResponse> CreateAsync(CreateOrderRequest request);
     Task<OrderResponse> PayAsync(int id);
     Task<OrderResponse> CancelAsync(int id);
+    Task CancelExpiredReservationsAsync();
 }
 
 public record CreateOrderRequest(

@@ -27,6 +27,25 @@ public class OrderService : IOrderService
         _orderSettings = orderSettings.Value;
     }
 
+    public async Task CancelExpiredReservationsAsync()
+    {
+        var expiredOrders = await _orderRepository.GetExpiredReservationsAsync();
+
+        foreach (var order in expiredOrders)
+        {
+            order.Status = OrderStatus.Cancelled;
+
+            foreach (var item in order.OrderItems)
+            {
+                item.Pet.Status = PetStatus.Available;
+                item.Pet.ReservedUntil = null;
+                item.Pet.UpdatedAt = DateTime.UtcNow;
+            }
+
+            await _orderRepository.UpdateAsync(order);
+        }
+    }
+
     public async Task<OrderResponse> CreateAsync(CreateOrderRequest request)
     {
         var user = await _userRepository.GetByIdAsync(request.UserId);

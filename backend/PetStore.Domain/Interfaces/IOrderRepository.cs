@@ -9,4 +9,5 @@ public interface IOrderRepository
     Task<Order> AddAsync(Order order);
     Task UpdateAsync(Order order);
     Task<(List<Order> Items, int TotalCount)> GetPagedAsync(OrderQueryParameters parameters);
+    Task<List<Order>> GetExpiredReservationsAsync();
 }
