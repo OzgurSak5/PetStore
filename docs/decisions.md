@@ -506,3 +506,111 @@ fazlası olarak serviste hesaplanıyor. `AddPetPhotoRequest`'te bu alan yok.
 **Gerekçe:** İstemciye bıraksam aynı sıraya birden fazla fotoğraf düşebilir ya da
 boşluk oluşabilirdi. Aynı mantık `Pet` oluştururken `Status` ve `CreatedAt` alanlarını
 DTO'ya koymamakla aynı — sistemin belirlemesi gereken değerler dışarıdan alınmıyor.
+
+---
+
+## 33. Yüklenen dosyalar diskte, uygulamanın yanında tutuluyor
+
+**Karar:** Fotoğraflar `wwwroot/uploads/pets` altına yazılıyor, statik dosya olarak
+sunuluyor. Nesne depolama (S3, Azure Blob) kullanılmadı.
+
+**Gerekçe:** Ek bir servis kurmadan çalışıyor, bu projenin amacı dosya yükleme akışını
+öğrenmek. Nesne depolama gerçek üretim çözümü ve ölçekleniyor ama SDK öğrenmek ve ayrı
+bir servis yönetmek konuyu dağıtırdı.
+
+**Not:** Dosyalar konteyner içinde durduğu için volume bağlanmazsa konteyner yeniden
+kurulunca gidiyorlar. Birden fazla sunucu çalıştırılırsa da dosyalar tek makinede kalır.
+İkisi de v1 için kabul edilebilir, ama Dockerfile yazılırken volume tanımlanması
+gerekiyor.
+
+**Alternatif:** Veritabanında `bytea` olarak saklamak. Yedeklemesi kolay ama veritabanını
+şişiriyor ve sorguları yavaşlatıyor, pratikte kaçınılıyor.
+
+---
+
+## 34. Dosya tipi hem uzantıdan hem içerikten doğrulanıyor
+
+**Karar:** Yüklenen dosyanın uzantısı izin verilen listede mi diye bakılıyor, ayrıca ilk
+dört baytı okunup gerçekten resim mi diye kontrol ediliyor.
+
+**Gerekçe:** Uzantı kontrolü tek başına kandırılabilir — bir `.exe` dosyasını `kedi.jpg`
+diye adlandırmak mümkün. Dosya tiplerinin başında karakteristik baytlar var (JPEG
+`FF D8 FF`, PNG `89 50 4E 47`, WebP `RIFF`), bunlara bakmak gerçek içeriği doğruluyor.
+İkisini birden yapmak ucuz: uzantı kontrolü anında, bayt kontrolü dört bayt okumak.
+
+**Not:** Magic number okunduktan sonra `stream.Position = 0` ile akışı başa sarmak
+gerekiyor, yoksa dosyanın ilk dört baytı kaybolur.
+
+---
+
+## 35. Dosya adları GUID ile üretiliyor
+
+**Karar:** Kullanıcının gönderdiği dosya adı kullanılmıyor; `Guid.NewGuid()` ile yeni bir
+ad üretilip sadece uzantı korunuyor.
+
+**Gerekçe:** Üç sorunu birden çözüyor. İki kullanıcı aynı adı gönderirse çakışma olmuyor.
+Dosya adında `../` geçerse sunucuda başka bir yere yazma denemesi (path traversal)
+engelleniyor. Türkçe karakter, boşluk gibi şeyler URL'de sorun çıkarmıyor.
+
+---
+
+## 36. Fotoğraf silinince diskteki dosya da siliniyor
+
+**Karar:** `DeleteAsync` veritabanı kaydını sildikten sonra `IFileStorageService.Delete`
+çağrılıyor. Silme işlemi `try/catch` içinde, hata olursa yutuluyor.
+
+**Gerekçe:** Dosya bırakılırsa zamanla kimsenin referans vermediği yetim dosyalar
+birikiyor. Hatanın yutulma sebebi: dosya silinemese bile veritabanı kaydının silinmiş
+olması daha önemli, tersi tutarsızlık yaratırdı.
+
+**Not:** URL ile eklenmiş fotoğraflarda (dış adres) bu çağrı bir şey yapmıyor, `File.Exists`
+false dönüyor. Zararsız.
+
+---
+
+## 37. Rezervasyon temizliği arka plan servisiyle yapılıyor
+
+**Karar:** `ReservationCleanupService` adında bir `BackgroundService` belli aralıklarla
+çalışıp süresi dolmuş siparişleri iptal ediyor, hayvanlarını `Available` yapıyor. Aralık
+`OrderSettings:ReservationCheckIntervalSeconds` değerinden okunuyor.
+
+**Gerekçe:** `ReservedUntil` alanı yazılıyordu ama kimse okumuyordu; süre dolsa bile
+hayvan `Pending` kalıyordu. Veritabanı kendi kendine alan değiştirmediği için düzenli
+çalışan bir şeye ihtiyaç var.
+
+**Alternatif:** Okuma anında hesaplamak — `GET /api/Pet` çağrıldığında "bu hayvan
+`Pending` ama süresi dolmuş, demek ki müsait" demek. Arka plan servisi gerektirmiyor ama
+veritabanındaki `Status` yanlış kalıyor ve bu hesabı her sorguda tekrarlamak gerekiyor,
+unutulan yerde tutarsızlık çıkıyor.
+
+---
+
+## 38. Süresi dolan sipariş de iptal ediliyor
+
+**Karar:** Temizlik sadece hayvanları serbest bırakmıyor, siparişi de `Cancelled` yapıyor.
+
+**Gerekçe:** Sadece hayvanlar serbest bırakılsaydı sipariş `Created` durumunda kalırdı ve
+içindeki hayvanlar başkasına satılabilirdi. Kullanıcı ödemeye çalıştığında ne olacağı
+belirsiz olurdu. İkisini birlikte iptal etmek tutarlı durum bırakıyor.
+
+---
+
+## 39. Arka plan servisinde scope elle açılıyor
+
+**Not:** `BackgroundService` uygulama ömrü boyunca tek örnek olarak yaşıyor (singleton),
+`DbContext` ise `AddScoped` ile kayıtlı. Singleton bir servise scoped bağımlılık
+enjekte edilemiyor — ASP.NET Core bunu çalışma zamanında hata olarak bildiriyor.
+
+Bu yüzden servise `IServiceScopeFactory` enjekte ediliyor ve döngünün her turunda elle
+scope açılıyor:
+
+```csharp
+using var scope = _scopeFactory.CreateScope();
+var orderService = scope.ServiceProvider.GetRequiredService<IOrderService>();
+```
+
+Aynı durum `Program.cs`'teki seed çağrısında da var — orada da scope elle açılıyor.
+
+**İki ayrıntı:** Döngü içindeki iş `try/catch` ile sarılı, bir hata olursa servis ölmesin
+diye. `Task.Delay` çağrısına `stoppingToken` geçiriliyor ki uygulama kapanırken bekleme
+hemen kesilsin, bir sonraki tura kadar beklemesin.
