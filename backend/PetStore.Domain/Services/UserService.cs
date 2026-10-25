@@ -8,10 +8,12 @@ namespace PetStore.Domain.Services;
 public class UserService : IUserService
 {
     private readonly IUserRepository _userRepository;
+    private readonly IPasswordHasher _passwordHasher;
 
-    public UserService(IUserRepository userRepository)
+    public UserService(IUserRepository userRepository, IPasswordHasher passwordHasher)
     {
         _userRepository = userRepository;
+        _passwordHasher = passwordHasher;
     }
 
     public async Task<UserResponse> UpdateAsync(int id, UpdateUserRequest request)
@@ -23,7 +25,14 @@ public class UserService : IUserService
             throw new NotFoundException("User not found.");
         }
 
-        user.Email = request.Email;
+        var email = EmailNormalizer.Normalize(request.Email);
+
+        if (email != user.Email && await _userRepository.EmailExistsAsync(email))
+        {
+            throw new ConflictException("Email already exists.");
+        }
+
+        user.Email = email;
         user.Role = request.Role;
 
         await _userRepository.UpdateAsync(user);
@@ -59,10 +68,17 @@ public class UserService : IUserService
 
     public async Task<UserResponse> CreateAsync(CreateUserRequest request)
     {
+        var email = EmailNormalizer.Normalize(request.Email);
+
+        if (await _userRepository.EmailExistsAsync(email))
+        {
+            throw new ConflictException("Email already exists.");
+        }
+
         var user = new User
         {
-            Email = request.Email,
-            PasswordHash = request.Password,
+            Email = email,
+            PasswordHash = _passwordHasher.Hash(request.Password),
             Role = request.Role,
             CreatedAt = DateTime.UtcNow
         };

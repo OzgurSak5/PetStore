@@ -23,30 +23,22 @@ public class PetStoreDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
-        modelBuilder.Entity<Favorite>()
-        .HasKey(f => new { f.UserId, f.PetId });
+        modelBuilder.Entity<Favorite>().HasKey(f => new { f.UserId, f.PetId });
 
-        modelBuilder.Entity<Pet>()
-            .Property(p => p.Status)
-            .HasConversion<string>();
+        modelBuilder.Entity<Pet>().Property(p => p.Status).HasConversion<string>();
 
-        modelBuilder.Entity<Pet>()
-            .Property(p => p.Gender)
-            .HasConversion<string>();
+        modelBuilder.Entity<Pet>().Property(p => p.Gender).HasConversion<string>();
 
-        modelBuilder.Entity<Order>()
-            .Property(o => o.Status)
-            .HasConversion<string>();
+        modelBuilder.Entity<Order>().Property(o => o.Status).HasConversion<string>();
 
-        modelBuilder.Entity<User>()
-            .Property(u => u.Role)
-            .HasConversion<string>();
-            
-        modelBuilder.Entity<Pet>()
-            .HasQueryFilter(p => !p.IsDeleted);
+        modelBuilder.Entity<User>().Property(u => u.Role).HasConversion<string>();
 
-        modelBuilder.Entity<User>()
-            .HasQueryFilter(u => !u.IsDeleted);
-        modelBuilder.Entity<RefreshToken>().HasIndex(rt => rt.TokenHash);    
+        modelBuilder.Entity<Pet>().HasQueryFilter(p => !p.IsDeleted);
+
+        modelBuilder.Entity<User>().HasQueryFilter(u => !u.IsDeleted);
+
+        modelBuilder.Entity<RefreshToken>().HasIndex(rt => rt.TokenHash);
+        
+        modelBuilder.Entity<User>().HasIndex(u => u.Email).IsUnique();
     }
 }

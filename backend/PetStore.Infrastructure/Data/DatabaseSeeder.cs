@@ -1,12 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using PetStore.Domain.Entities;
 using PetStore.Domain.Enums;
+using PetStore.Domain.Interfaces;
 
 namespace PetStore.Infrastructure.Data;
 
 public static class DatabaseSeeder
 {
-    public static async Task SeedAsync(PetStoreDbContext context)
+    public static async Task SeedAsync(PetStoreDbContext context, IPasswordHasher passwordHasher)
     {
         if(await context.Species.AnyAsync())
         {
@@ -108,7 +109,7 @@ public static class DatabaseSeeder
         context.Users.Add(new User
         {
             Email = "admin@petstore.local",
-            PasswordHash = "seed-placeholder",
+            PasswordHash = passwordHasher.Hash("Admin123!"),
             Role = UserRole.Admin,
             CreatedAt = now,
         });

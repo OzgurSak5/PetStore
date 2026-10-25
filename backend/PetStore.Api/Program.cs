@@ -7,6 +7,7 @@ using PetStore.Api.Middleware;
 using PetStore.Domain.Settings;
 using PetStore.Infrastructure.Storage;
 using PetStore.Api.BackgroundServices;
+using PetStore.Infrastructure.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -35,6 +36,7 @@ builder.Services.AddScoped<IFavoriteService, FavoriteService>();
 builder.Services.AddScoped<IPetPhotoRepository, PetPhotoRepository>();
 builder.Services.AddScoped<IPetPhotoService, PetPhotoService>();
 builder.Services.AddScoped<IFileStorageService, FileStorageService>();
+builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
 builder.Services.AddHostedService<ReservationCleanupService>();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
@@ -66,7 +68,8 @@ if (app.Environment.IsDevelopment())
 {
     using var scope = app.Services.CreateScope();
     var context = scope.ServiceProvider.GetRequiredService<PetStoreDbContext>();
-    await DatabaseSeeder.SeedAsync(context);
+    var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
+    await DatabaseSeeder.SeedAsync(context, passwordHasher);    
 }
 
 app.Run();
