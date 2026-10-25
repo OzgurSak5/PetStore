@@ -35,6 +35,18 @@ public class GlobalExceptionHandler : IExceptionHandler
                 Title = "Conflict",
                 Detail = exception.Message
             },
+            UnauthorizedException => new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "Unauthorized",
+                Detail = exception.Message
+            },
+            TooManyRequestsException => new ProblemDetails
+            {
+                Status = StatusCodes.Status429TooManyRequests,
+                Title = "Too Many Requests",
+                Detail = exception.Message
+            },
             _ => new ProblemDetails
             {
                 Status = StatusCodes.Status500InternalServerError,
@@ -48,6 +60,11 @@ public class GlobalExceptionHandler : IExceptionHandler
         if (problemDetails.Status == StatusCodes.Status500InternalServerError)
         {
             _logger.LogError(exception, "Unhandled exception");
+        }
+
+        if (exception is TooManyRequestsException tooManyRequests)
+        {
+            httpContext.Response.Headers.RetryAfter = tooManyRequests.RetryAfterSeconds.ToString();
         }
 
         httpContext.Response.StatusCode = problemDetails.Status ?? StatusCodes.Status500InternalServerError;

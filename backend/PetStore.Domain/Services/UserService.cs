@@ -9,11 +9,14 @@ public class UserService : IUserService
 {
     private readonly IUserRepository _userRepository;
     private readonly IPasswordHasher _passwordHasher;
+    private readonly IRefreshTokenRepository _refreshTokenRepository;
 
-    public UserService(IUserRepository userRepository, IPasswordHasher passwordHasher)
+    public UserService(IUserRepository userRepository, IPasswordHasher passwordHasher,
+        IRefreshTokenRepository refreshTokenRepository)
     {
         _userRepository = userRepository;
         _passwordHasher = passwordHasher;
+        _refreshTokenRepository = refreshTokenRepository;
     }
 
     public async Task<UserResponse> UpdateAsync(int id, UpdateUserRequest request)
@@ -52,6 +55,7 @@ public class UserService : IUserService
         user.IsDeleted = true;
 
         await _userRepository.UpdateAsync(user);
+        await _refreshTokenRepository.RevokeAllForUserAsync(id);
     }
 
     public async Task<List<UserResponse>> GetAllAsync()
