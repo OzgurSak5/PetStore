@@ -21,6 +21,9 @@ builder.Services.Configure<OrderSettings>(
 builder.Services.Configure<FileStorageSettings>(
     builder.Configuration.GetSection("FileStorageSettings"));
 
+builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("Jwt"));
+builder.Services.Configure<RateLimitSettings>(builder.Configuration.GetSection("RateLimit"));
+
 builder.Services.AddScoped<ISpeciesRepository, SpeciesRepository>();
 builder.Services.AddScoped<ISpeciesService, SpeciesService>();
 builder.Services.AddScoped<IBreedRepository, BreedRepository>();
@@ -37,6 +40,8 @@ builder.Services.AddScoped<IPetPhotoRepository, PetPhotoRepository>();
 builder.Services.AddScoped<IPetPhotoService, PetPhotoService>();
 builder.Services.AddScoped<IFileStorageService, FileStorageService>();
 builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
+builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
 builder.Services.AddHostedService<ReservationCleanupService>();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
