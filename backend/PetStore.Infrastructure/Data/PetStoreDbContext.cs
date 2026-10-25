@@ -9,14 +9,15 @@ public class PetStoreDbContext : DbContext
     {
     }
 
-    public DbSet<User> Users { get; set; } = null!;
-    public DbSet<Pet> Pets { get; set; } = null!;
-    public DbSet<Favorite> Favorites { get; set; } = null!;
-    public DbSet<PetPhoto> PetPhotos { get; set; } = null!;
-    public DbSet<Order> Orders { get; set; } = null!;
-    public DbSet<OrderItem> OrderItems { get; set; } = null!;
-    public DbSet<Species> Species { get; set; } = null!;
-    public DbSet<Breed> Breeds { get; set; } = null!;
+    public DbSet<User> Users => Set<User>();
+    public DbSet<Pet> Pets => Set<Pet>();
+    public DbSet<Favorite> Favorites => Set<Favorite>();
+    public DbSet<PetPhoto> PetPhotos => Set<PetPhoto>();
+    public DbSet<Order> Orders => Set<Order>();
+    public DbSet<OrderItem> OrderItems => Set<OrderItem>();
+    public DbSet<Species> Species => Set<Species>();
+    public DbSet<Breed> Breeds => Set<Breed>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -46,5 +47,6 @@ public class PetStoreDbContext : DbContext
 
         modelBuilder.Entity<User>()
             .HasQueryFilter(u => !u.IsDeleted);
+        modelBuilder.Entity<RefreshToken>().HasIndex(rt => rt.TokenHash);    
     }
 }

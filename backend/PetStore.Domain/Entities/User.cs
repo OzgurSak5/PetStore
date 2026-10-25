@@ -13,4 +13,5 @@ public class User
     
     public ICollection<Order> Orders { get; set; } = new List<Order>();
     public ICollection<Favorite> Favorites { get; set; } = new List<Favorite>();
+    public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
 }
