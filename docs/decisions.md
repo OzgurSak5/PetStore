@@ -138,6 +138,10 @@ Kimlik doğrulamanın derinlemesine uygulaması önceki bir projede
 (Login System) ele alındığından, bu projede odak AI servisi ve
 OpenAPI-first çalışma disiplinidir.
 
+**Güncelleme:** Bu erteleme sona erdi, JWT 40–52 arası maddelerde
+uygulandı. Tahmin doğru çıktı: şema hiç değişmedi, `RefreshTokens`
+dışında yeni tablo gerekmedi.
+
 ---
 
 ## 11. Ürün katalogu kapsam dışı
@@ -614,3 +618,265 @@ Aynı durum `Program.cs`'teki seed çağrısında da var — orada da scope elle
 **İki ayrıntı:** Döngü içindeki iş `try/catch` ile sarılı, bir hata olursa servis ölmesin
 diye. `Task.Delay` çağrısına `stoppingToken` geçiriliyor ki uygulama kapanırken bekleme
 hemen kesilsin, bir sonraki tura kadar beklemesin.
+---
+
+## 40. Şifreler BCrypt ile hash'leniyor
+
+**Karar:** `User.PasswordHash` alanına düz metin yerine BCrypt hash'i yazılıyor.
+Hashleme `IPasswordHasher` arayüzünün arkasında, implementasyonu
+`Infrastructure/Security` altında.
+
+**Gerekçe:** Düz metin şifre veritabanı sızdığında doğrudan kullanılabilir hale
+geliyor. BCrypt kasten yavaş çalışıyor (varsayılan work factor 11), yani saldırgan
+saniyede milyonlarca deneme yapamıyor. Ayrıca her çağrıda rastgele bir salt üretip
+sonucun içine gömüyor — aynı şifreyi kullanan iki kullanıcının hash'i farklı oluyor,
+veritabanına bakıp kimlerin aynı şifreyi kullandığı anlaşılamıyor.
+
+Arayüz arkasına almamın sebebi: BCrypt üçüncü parti bir kütüphane, Domain katmanının
+ona doğrudan bağımlı olmaması gerekiyor. `IFileStorageService` ile aynı desen.
+
+**Not:** Mevcut test kullanıcıları düz metin şifre taşıdığı için hashleme eklenirken
+silindi. Gerçek veriyle çalışan bir sistemde bu yol izlenemez; kullanıcıların bir
+sonraki girişinde şifreyi yakalayıp yeniden hash'lemek gerekirdi.
+
+---
+
+## 41. Refresh token'lar hash'lenerek saklanıyor ve tek kullanımlık
+
+**Karar:** `RefreshTokens` tablosunda token'ın kendisi değil SHA-256 özeti tutuluyor.
+Token kullanıldığında `RevokedAt` doluyor ve yerine yenisi üretiliyor.
+
+**Gerekçe:** Refresh token şifre gibi davranıyor — elinde olan kişi 7 gün boyunca yeni
+access token üretebiliyor. Özet saklandığında veritabanı sızsa bile token geri
+üretilemiyor.
+
+Rotasyonun kazancı şu: token çalınırsa saldırgan onu bir kez kullanabiliyor, kullandığı
+anda token iptal oluyor. Gerçek kullanıcı bir sonraki yenilemede 401 alıp yeniden giriş
+yapmak zorunda kalıyor, yani sızıntı fark edilir hale geliyor. Aynı token 7 gün geçerli
+kalsaydı saldırgan sessizce erişmeye devam ederdi.
+
+**Neden BCrypt değil:** BCrypt her çağrıda farklı salt ürettiği için aynı girdi farklı
+çıktı veriyor, yani `WHERE "TokenHash" = ...` diye arama yapılamazdı; tüm tabloyu çekip
+tek tek doğrulamak gerekirdi. Ayrıca BCrypt'in yavaşlığı kısa ve tahmin edilebilir
+şifreler için gerekli — 64 baytlık rastgele bir token zaten kaba kuvvetle bulunamaz.
+
+**Not:** Satır silinmiyor, `RevokedAt` yazılıyor. Hangi token ne zaman üretildi ve ne
+zaman iptal edildi görülebiliyor. Soft delete kararının aynı mantığı.
+
+---
+
+## 42. Email normalleştiriliyor ve tekil
+
+**Karar:** Email'ler kaydedilmeden önce `Trim().ToLowerInvariant()` ile
+normalleştiriliyor, `Users` tablosunda `Email` üzerinde unique index var.
+
+**Gerekçe:** Normalleştirme olmasa `Ozgur@x.com` ile kayıt olan kişi `ozgur@x.com` ile
+giriş yapamazdı, ve unique index ikisini farklı email sayardı. `ToLower()` değil
+`ToLowerInvariant()` çünkü `ToLower()` makinenin kültürüne bakıyor ve Türkçe'de `I`
+harfi `ı`'ya düşüyor — sunucunun dil ayarı değişince email'ler sessizce başka bir şeye
+normalleşirdi.
+
+**Soft delete ile etkileşim:** `User` soft delete ile siliniyor, satır tabloda kalıyor,
+yani silinmiş bir kullanıcının email'i bir daha kullanılamıyor. Kısmi index
+(`HasFilter`) ile email'i serbest bırakmak mümkündü ama tercih etmedim: aynı email'i
+hem eski hem yeni hesabın paylaşması sipariş geçmişinde "bu kimin" sorusunu
+karıştırıyor.
+
+**Not:** Çakışma kontrolü `IgnoreQueryFilters()` ile yapılıyor, çünkü normal sorgu
+silinmiş kullanıcıyı görmüyor. Görmeseydi kontrol "boş" derdi, veritabanı unique index
+ihlali atardı ve istek 409 yerine 500 dönerdi.
+
+---
+
+## 43. Rol sunucu tarafında atanıyor
+
+**Karar:** `RegisterRequest` DTO'sunda rol alanı yok; `AuthService.RegisterAsync` her
+yeni kullanıcıya `UserRole.Customer` atıyor. Admin hesapları `POST /api/User` üzerinden
+açılıyor ve o endpoint admin'e kapalı.
+
+**Gerekçe:** Rol istekten gelseydi herkes kendini admin yapabilirdi. Alanı silmek
+"kontrol etmeyi unutma" riskini de ortadan kaldırıyor — kontrol edilecek bir şey
+gelmiyor.
+
+**Not:** Bu bir tavuk-yumurta sorunu yaratıyor: ilk admin hesabını açmak için admin
+token'ı gerekiyor. Seeder geliştirme ortamında bir admin kuruyor, ama `Species` tablosu
+doluysa atlıyor. Üretimde ilk admin elle veritabanından açılmak zorunda. Kabul
+edilebilir, çünkü alternatifi "ilk kaydolan admin olsun" gibi istismara açık bir kural.
+
+---
+
+## 44. Token'daki claim adları kısa tutuluyor
+
+**Karar:** Access token'a `sub`, `email`, `jti` ve `role` claim'leri yazılıyor.
+`JwtBearer` tarafında `MapInboundClaims = false`, `RoleClaimType = "role"`,
+`NameClaimType = "sub"` ayarlandı.
+
+**Gerekçe:** .NET varsayılan olarak claim adlarını eski WS-Federation URI'lerine
+çeviriyor — `sub` yerine `http://schemas.xmlsoap.org/ws/2005/05/identity/claims/
+nameidentifier` gibi. Bu hem token'ı şişiriyor hem de okuma tarafında "hangi isimle
+arayacağım" belirsizliği yaratıyor. Login projesinde `Me()` metodunda iki ayrı isimle
+aramak zorunda kalmıştım, sebebi buydu.
+
+`RoleClaimType = "role"` özellikle kritik: bu satır olmadan `[Authorize(Roles =
+"Admin")]` hiçbir zaman eşleşmiyor ve hata da vermiyor, sadece sessizce 403 dönüyor.
+
+**Not:** Token'ın içeriği şifreli değil, sadece Base64 ile kodlanmış — jwt.io'ya
+yapıştıran herkes claim'leri okuyabiliyor. İmza gizliliği değil bütünlüğü sağlıyor.
+Bu yüzden token'a hiçbir zaman hassas bilgi konmuyor.
+
+---
+
+## 45. Token doğrulama parametreleri açıkça yazılıyor
+
+**Karar:** `TokenValidationParameters` içinde issuer, audience, ömür ve imza
+doğrulamasının dördü de açık. `ClockSkew` 30 saniyeye çekildi.
+
+**Gerekçe:** `ValidateIssuerSigningKey` dördünün en kritiği — kapalı olsa biri kendi
+anahtarıyla imzaladığı, `role: Admin` yazan bir token üretip sisteme girerdi.
+`ValidateLifetime` kapalı olsa 15 dakikalık ömrün hiçbir anlamı kalmazdı.
+
+`ClockSkew`'in varsayılanı 5 dakika; yani varsayılan ayarla 15 dakikalık token aslında
+20 dakika geçerli oluyor. Bu tolerans sunucu saatlerinin sapması için var, tek makinede
+çalışırken gereksiz cömert.
+
+**Not:** İmzalama anahtarı `appsettings.json`'da boş duruyor, gerçek değer
+user-secrets'ta. `Program.cs` başlangıçta anahtarın var olduğunu ve en az 32 bayt
+olduğunu kontrol edip yoksa uygulamayı hiç açmıyor. Eksik anahtar fark edilmeden
+uygulamanın açılması, hatanın ilk giriş denemesinde anlaşılmaz bir mesajla çıkması
+demek olurdu.
+
+---
+
+## 46. Rate limiting iki katmanlı
+
+**Karar:** Email bazlı limit (5 dakikada 5 başarısız deneme) `AuthService` içinde,
+kendi yazdığım `LoginAttemptLimiter` ile. IP bazlı limit (5 dakikada 20 istek)
+middleware seviyesinde, ASP.NET Core'un `AddRateLimiter`'ı ile. İkisi de kayan pencere.
+
+**Gerekçe:** İkisinin işi farklı. Email limiti **bir hesabı** çok denemeden koruyor,
+IP limiti **bir saldırganı** çok hesap denemekten alıkoyuyor. Sadece email limiti
+olsaydı saldırgan bin farklı email deneyip her birinde 5 hak kullanırdı.
+
+Kayan pencere tercih edildi çünkü sabit pencerede sınırın hemen öncesi ve sonrası
+birleştirilerek iki katı deneme sıkıştırılabiliyor.
+
+**Not:** Email limiti sadece **başarısız** denemeleri sayıyor, IP limiti endpoint'e
+gelen **her isteği**. Başarılı giriş hak harcamamalı; IP limiti ise isteğin sonucunu
+bilmeden önce karar veriyor.
+
+**Bilinen eksikler:**
+- Sayaçlar bellekte, uygulama yeniden başlayınca sıfırlanıyor. Birden fazla sunucu
+  çalıştırılırsa her biri kendi sayacını tutar. Gerçek çözüm Redis gibi paylaşılan bir
+  depo, bu ölçekte gereksiz.
+- `RemoteIpAddress` bir reverse proxy arkasında proxy'nin adresini gösterir, bütün
+  kullanıcılar tek kovaya düşer. `X-Forwarded-For` okumak gerekir ama o başlık
+  güvenilir bir proxy set etmiyorsa istemci uydurabilir.
+- Kullanıcı bulunamadığında `Verify` çalışmadığı için cevap hızlı dönüyor, varsa BCrypt
+  yüz milisaniye harcıyor. Yanıt sürelerini ölçen biri bu farktan email'in kayıtlı olup
+  olmadığını çıkarabilir (zamanlama saldırısı). Çözümü sahte bir hash'e karşı doğrulama
+  yapıp süreyi eşitlemek; rate limiter deneme sayısını beşe indirdiği için şimdilik
+  kabul edilebilir.
+
+---
+
+## 47. Giriş hatalarında tek mesaj
+
+**Karar:** "Kullanıcı yok" ve "şifre yanlış" durumları aynı `401` ve aynı mesajla
+cevaplanıyor: "Invalid email or password."
+
+**Gerekçe:** Ayırsaydım saldırgana hangi email'lerin sistemde kayıtlı olduğunu
+söylemiş olurdum. Kayıtlı email listesi tek başına değerli bir bilgi, ayrıca saldırganın
+hangi hesaba yoğunlaşacağını belirler. Buna kullanıcı sayımı (user enumeration)
+deniyor.
+
+Aynı sebeple `LoginRequest`'te şifre için uzunluk kuralı yok — girişte "şifre en az 8
+karakter olmalı" demek sistemdeki kuralı açık etmek olurdu. Kurallar kayıt anında
+uygulanıyor.
+
+---
+
+## 48. Yetkilendirme varsayılan kapalı
+
+**Karar:** Controller sınıflarına en kısıtlayıcı kural yazılıyor, herkese açık
+action'lara `[AllowAnonymous]` ekleniyor. Katalog okuma (`Species`, `Breed`, `Pet`,
+fotoğraf listesi) herkese açık; yazma işlemleri ve `UserController`'ın tamamı admin'e;
+sipariş ve favoriler girişli kullanıcıya.
+
+**Gerekçe:** Tersini yapsaydım — sınıf açık, kısıtlı olanlara attribute — ileride yeni
+bir action eklediğimde attribute koymayı unutursam o action korumasız kalırdı ve bunu
+fark etmezdim. Bu yönde unutmanın sonucu "çalışmıyor" oluyor, "korumasız" değil.
+
+**Not:** Action seviyesindeki `[Authorize]` sınıf seviyesindekinin yerine geçmiyor,
+üstüne ekleniyor. `OrderController`'da sınıfta `[Authorize]`, listeleme action'ında
+`[Authorize(Roles = "Admin")]` var — o action için iki koşul birden geçerli.
+
+---
+
+## 49. Sahiplik token'dan belirleniyor
+
+**Karar:** `CreateOrderRequest`'ten `UserId` alanı kaldırıldı. Sipariş kimin adına
+veriliyorsa o bilgi token'dan okunuyor. Controller'lar `User.ToCurrentUser()` ile
+kimliği ve admin olup olmadığını servise taşıyor.
+
+**Gerekçe:** `[Authorize]` sadece "giriş yapmış mı" diye soruyor, "bu veri senin mi"
+diye sormuyor. Alan gövdede dururken giriş yapmış herhangi bir müşteri başkasının
+id'sini yazıp onun adına sipariş verebiliyordu. Bu açığa "broken object level
+authorization" deniyor ve gerçek dünyada en sık rastlanan API açığı.
+
+Alanı silmek, kontrol etmekten daha iyi: kontrol edilecek bir şey hiç gelmezse unutma
+ihtimali de olmuyor.
+
+**Not:** Sipariş sahipliği veritabanındaki kayıttan okunuyor (`order.UserId`), o yüzden
+kontrol servis katmanında. Favori sahipliği ise doğrudan rotada duruyor
+(`/api/User/{userId}/favorites`), veritabanına gitmeye gerek yok, o yüzden kontrol
+controller'da. Farklı yerlerde olmaları tutarsızlık değil, iki farklı kontrol türü.
+
+---
+
+## 50. Başkasının siparişinde `404`, başkasının favorisinde `403`
+
+**Karar:** Kullanıcı kendisine ait olmayan bir siparişi istediğinde `404` dönüyor.
+Kendisine ait olmayan bir favori koleksiyonunu istediğinde `403` dönüyor.
+
+**Gerekçe:** Siparişte `403` dönmek "bu sipariş var ama senin değil" demek olurdu —
+saldırgan id'leri 1'den başlayıp tarayarak sistemde kaç sipariş olduğunu, hangi
+aralıkta id kullanıldığını öğrenebilirdi. `404` hiçbir şey sızdırmıyor: var olmayan
+sipariş ile başkasının siparişi dışarıdan ayırt edilemiyor.
+
+Favoride böyle bir sızıntı yok, çünkü kontrol veritabanına gitmeden önce çalışıyor —
+`userId` ister var olsun ister olmasın cevap aynı `403`. Sızıntı olmadığına göre dürüst
+cevabı vermek daha iyi.
+
+---
+
+## 51. Şifre değişimi ve kullanıcı silme token'ları iptal ediyor
+
+**Karar:** `ChangePasswordAsync` ve `UserService.DeleteAsync` sonunda o kullanıcının
+bütün aktif refresh token'ları iptal ediliyor.
+
+**Gerekçe:** Şifre değiştirmek genellikle "hesabım tehlikede olabilir" demek. Eski
+refresh token'lar aktif kalsaydı saldırgan 7 gün daha erişmeye devam ederdi, yani şifre
+değiştirmenin bütün anlamı kaybolurdu. Silinen kullanıcı için de aynısı.
+
+**Not:** Access token'lar imzalı oldukları için iptal edilemiyor; süresi dolana kadar
+(15 dakika) geçerli kalıyorlar. Bu JWT'nin doğasında olan bir ödünç — token kendi
+kendini doğruluyor, karşılığında merkezi olarak geri çağrılamıyor. 15 dakikalık pencere
+kabul edilebilir bulundu.
+
+---
+
+## 52. Hata cevaplarının şekli henüz tam tutarlı değil
+
+**Not:** Aynı `404` iki farklı şekilde dönebiliyor. Controller `NotFound()`
+döndürdüğünde gövde boş kalıyor, `UseStatusCodePages` dolduruyor ve cevapta `type` ile
+`traceId` oluyor, `detail` olmuyor. Servis `NotFoundException` fırlattığında
+`GlobalExceptionHandler` üretiyor ve cevapta `detail` ile `instance` oluyor, `type`
+olmuyor.
+
+İkisi de geçerli Problem Details ama aynı API'de iki farklı şekil bulunması istemci
+tarafında can sıkıcı. Çözümü handler'a `Type` alanı eklemek ya da controller'larda
+`NotFound()` yerine exception fırlatmak. Henüz yapılmadı.
+
+**Not:** `UseStatusCodePages` eklenmeden önce 401 ve 403 cevaplarının gövdesi tamamen
+boştu — yetkilendirme middleware'i isteği `GlobalExceptionHandler`'a hiç uğratmadan
+kesiyor.

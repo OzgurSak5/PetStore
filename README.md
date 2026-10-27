@@ -13,7 +13,7 @@ reference specification.
 
 | Component | Status |
 |---|---|
-| Backend API | In progress — all eight resources implemented |
+| Backend API | In progress — all eight resources, JWT authentication |
 | Web (React) | Planned |
 | AI Service (FastAPI + RAG) | Planned |
 | QA (API + E2E tests) | Planned |
@@ -77,6 +77,8 @@ responses, so controllers contain no try/catch blocks:
 | `NotFoundException` | 404 | The requested record does not exist |
 | `ValidationException` | 400 | A referenced record is missing, or a value fails a contextual rule |
 | `ConflictException` | 409 | The resource's current state blocks the operation |
+| `UnauthorizedException` | 401 | Credentials or token are invalid |
+| `TooManyRequestsException` | 429 | The login rate limit has been reached |
 
 ### Validation
 
@@ -90,6 +92,21 @@ the service layer.
 Operations that span several tables are written in a single `SaveChangesAsync` call, so
 they either all commit or none do. Placing an order inserts one `Order` row, N
 `OrderItem` rows and updates N `Pet` rows atomically.
+
+### Authentication
+
+Passwords are hashed with BCrypt. Logging in returns a short-lived access token (15
+minutes) and a refresh token (7 days). Refresh tokens are stored as SHA-256 digests
+rather than in plain text, and each one is single-use: refreshing revokes the old token
+and issues a new one, so a stolen token stops working as soon as the real user refreshes.
+
+Who a request belongs to is read from the token, never from the request body. A customer
+cannot place an order, read a favourite list or cancel an order on someone else's behalf,
+even with a valid token of their own.
+
+Login is rate limited in two layers: five failed attempts per email and twenty requests
+per IP address, both over a five-minute sliding window. The first protects one account
+from being guessed, the second stops one attacker from working through many accounts.
 
 ---
 
@@ -133,13 +150,30 @@ dotnet user-secrets set "ConnectionStrings:DefaultConnection" \
   --project PetStore.Api
 ```
 
-**3. Apply migrations**
+**3. Store the JWT signing key in user-secrets**
+
+Generate a random 32-byte key:
+
+```powershell
+$bytes = [byte[]]::new(32)
+[System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+[Convert]::ToBase64String($bytes)
+```
+
+```bash
+dotnet user-secrets set "Jwt:Key" "<generated key>" --project PetStore.Api
+```
+
+The application refuses to start if this key is missing or shorter than 32 bytes, so a
+misconfiguration fails immediately rather than at the first login attempt.
+
+**4. Apply migrations**
 
 ```bash
 dotnet ef database update --project PetStore.Infrastructure --startup-project PetStore.Api
 ```
 
-**4. Run the API**
+**5. Run the API**
 
 ```bash
 cd PetStore.Api
@@ -149,12 +183,34 @@ dotnet run
 Swagger UI: `http://localhost:5087/swagger`
 
 On first run in the Development environment the application seeds a small set of sample
-species, breeds and pets, so the API is usable straight away. The seeder is skipped if
-the database already holds data.
+species, breeds and pets, so the API is usable straight away. It also creates an admin
+account — `admin@petstore.local` / `Admin123!` — for development only; the seeder never
+runs outside Development, and in a real deployment the first admin has to be created
+directly in the database. The seeder is skipped if the database already holds data.
 
 ---
 
 ## API
+
+### Auth
+
+| Method | Route | Description |
+|---|---|---|
+| POST | `/api/Auth/register` | 201 — creates a `Customer` account |
+| POST | `/api/Auth/login` | 200 — access token + refresh token, 401 / 429 |
+| POST | `/api/Auth/refresh` | 200 — rotates the refresh token, 401 |
+| POST | `/api/Auth/logout` | 204 — revokes the refresh token |
+| GET | `/api/Auth/me` | 200 — the caller's id, email and role |
+| POST | `/api/Auth/change-password` | 204 — also revokes every refresh token |
+
+Roles are never taken from the request: registering always produces a `Customer`, and
+admin accounts are created through `POST /api/User`, which is itself admin-only.
+
+### Access levels
+
+Reading the catalogue — species, breeds, pets and their photos — needs no token. Placing
+and managing your own orders and favourites needs any valid token. Everything that writes
+to the catalogue, and all of `/api/User`, needs an `Admin` token.
 
 `Species`, `Breed`, `Pet` and `User` each support the same five operations:
 
@@ -188,6 +244,11 @@ Placing an order reserves each pet (`Pending`) for a configurable window and fre
 price on the order item, so later price changes never alter past orders. Only orders in
 `Created` status can be paid or cancelled.
 
+The order is placed for whoever the token belongs to — there is no `userId` in the
+request body. Listing every order is admin-only; the other four operations work on the
+caller's own orders, and an order belonging to someone else returns 404 rather than 403,
+so order ids cannot be probed.
+
 ### Favorites and pet photos
 
 Both are scoped to their parent resource, since neither exists on its own:
@@ -205,6 +266,9 @@ DELETE /api/Pet/{petId}/photos/{photoId}
 
 Exactly one photo per pet is marked primary. The first photo added becomes the cover
 automatically, and deleting the cover promotes the next one in sort order.
+
+The `{userId}` in a favourites route has to match the caller's own id, otherwise the
+request is rejected with 403 — an admin is the only exception.
 
 ### Deletion semantics
 
@@ -260,9 +324,9 @@ Full decision log with alternatives considered: [`docs/decisions.md`](./docs/dec
 - [x] Development seed data
 - [x] Pagination, filtering and search
 - [x] Remaining resources: `PetPhoto`, `Order`, `OrderItem`, `Favorite`
-- [ ] File upload for pet photos
-- [ ] Background service to release expired reservations
-- [ ] JWT authentication
+- [x] File upload for pet photos
+- [x] Background service to release expired reservations
+- [x] JWT authentication — hashing, refresh rotation, rate limiting, role and ownership checks
 - [ ] Dockerfile for the API itself
 - [ ] Complete the `docs/openapi.yaml` contract
 - [ ] React web client
