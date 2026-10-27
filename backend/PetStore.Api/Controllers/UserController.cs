@@ -1,12 +1,17 @@
 using Microsoft.AspNetCore.Mvc;
 using PetStore.Domain.Interfaces;
 using PetStore.Domain.DTOs;
+using Microsoft.AspNetCore.Authorization;
+using PetStore.Domain.Enums;
 
 namespace PetStore.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Roles = nameof(UserRole.Admin))]
 [Produces("application/json")]
+[ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+[ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
 public class UserController : ControllerBase
 {
     private readonly IUserService _userService;

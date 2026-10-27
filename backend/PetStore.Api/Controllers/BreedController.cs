@@ -1,12 +1,17 @@
 using Microsoft.AspNetCore.Mvc;
 using PetStore.Domain.Interfaces;
 using PetStore.Domain.DTOs;
+using PetStore.Domain.Enums;
+using Microsoft.AspNetCore.Authorization;
 
 namespace PetStore.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Roles = nameof(UserRole.Admin))]
 [Produces("application/json")]
+[ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+[ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
 public class BreedController : ControllerBase
 {
     private readonly IBreedService _breedService;
@@ -38,6 +43,7 @@ public class BreedController : ControllerBase
 
 
     [HttpGet]
+    [AllowAnonymous]
     [ProducesResponseType<PagedResult<BreedResponse>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAll([FromQuery] BreedQueryParameters parameters)
     {
@@ -46,6 +52,7 @@ public class BreedController : ControllerBase
     }
 
     [HttpGet("{id}")]
+    [AllowAnonymous]
     [ProducesResponseType<BreedResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById(int id)

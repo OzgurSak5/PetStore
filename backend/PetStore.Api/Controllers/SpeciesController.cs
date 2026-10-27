@@ -1,12 +1,17 @@
 using Microsoft.AspNetCore.Mvc;
 using PetStore.Domain.Interfaces;
 using PetStore.Domain.DTOs;
+using Microsoft.AspNetCore.Authorization;
+using PetStore.Domain.Enums;
 
 namespace PetStore.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Roles = nameof(UserRole.Admin))]
 [Produces("application/json")]
+[ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+[ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
 public class SpeciesController : ControllerBase
 {
     private readonly ISpeciesService _speciesService;
@@ -37,6 +42,7 @@ public class SpeciesController : ControllerBase
     }
 
     [HttpGet]
+    [AllowAnonymous]
     [ProducesResponseType<List<SpeciesResponse>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAll()
     {
@@ -45,6 +51,7 @@ public class SpeciesController : ControllerBase
     }
 
     [HttpGet("{id}")]
+    [AllowAnonymous]
     [ProducesResponseType<SpeciesResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById(int id)

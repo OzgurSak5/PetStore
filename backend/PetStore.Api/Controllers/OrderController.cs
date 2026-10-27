@@ -1,12 +1,17 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PetStore.Domain.DTOs;
 using PetStore.Domain.Interfaces;
+using PetStore.Domain.Enums;
 
 namespace PetStore.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 [Produces("application/json")]
+[ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+[ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
 public class OrderController : ControllerBase
 {
     private readonly IOrderService _orderService;
@@ -17,6 +22,7 @@ public class OrderController : ControllerBase
     }
 
     [HttpGet]
+    [Authorize(Roles = nameof(UserRole.Admin))]
     [ProducesResponseType<PagedResult<OrderResponse>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAll([FromQuery] OrderQueryParameters parameters)
     {

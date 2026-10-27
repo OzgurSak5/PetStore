@@ -1,9 +1,9 @@
 using Microsoft.AspNetCore.Authorization;   // [Authorize]
 using Microsoft.AspNetCore.Mvc;
 using PetStore.Domain.DTOs;
-using PetStore.Domain.Exceptions;           // UnauthorizedException
 using PetStore.Domain.Interfaces;
 using Microsoft.AspNetCore.RateLimiting;
+using PetStore.Api.Extensions;
 
 namespace PetStore.Api.Controllers;
 
@@ -62,7 +62,7 @@ public class AuthController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public ActionResult<AuthResponse> Me()
     {
-        var userId = GetUserId();
+        var userId = User.GetUserId();
         var email = User.FindFirst("email")?.Value ?? string.Empty;
         var role = User.FindFirst("role")?.Value ?? string.Empty;
 
@@ -76,19 +76,9 @@ public class AuthController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> ChangePassword(ChangePasswordRequest request)
     {
-        await _authService.ChangePasswordAsync(GetUserId(), request);
+        await _authService.ChangePasswordAsync(User.GetUserId(), request);
         return NoContent();
     }
 
-    private int GetUserId()
-    {
-        var sub = User.FindFirst("sub")?.Value;
-
-        if (!int.TryParse(sub, out var userId))
-        {
-            throw new UnauthorizedException("Invalid token.");
-        }
-
-        return userId;
-    }
+    
 }

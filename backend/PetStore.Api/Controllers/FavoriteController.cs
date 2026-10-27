@@ -1,12 +1,16 @@
 using Microsoft.AspNetCore.Mvc;
 using PetStore.Domain.DTOs;
 using PetStore.Domain.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 
 namespace PetStore.Api.Controllers;
 
 [ApiController]
 [Route("api/User/{userId}/favorites")]
+[Authorize]
 [Produces("application/json")]
+[ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+[ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
 public class FavoriteController : ControllerBase
 {
     private readonly IFavoriteService _favoriteService;
