@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using PetStore.Domain.DTOs;
 using PetStore.Domain.Exceptions;           // UnauthorizedException
 using PetStore.Domain.Interfaces;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace PetStore.Api.Controllers;
 
@@ -27,7 +28,8 @@ public class AuthController : ControllerBase
         return Created($"/api/User/{response.UserId}", response);
     }
 
-    [HttpPost("login")]
+    [EnableRateLimiting("login-ip")]
+    [HttpPost("login")] 
     [ProducesResponseType<TokenResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
