@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using PetStore.Domain.DTOs;
 using PetStore.Domain.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using PetStore.Api.Extensions;
 
 namespace PetStore.Api.Controllers;
 
@@ -25,6 +26,11 @@ public class FavoriteController : ControllerBase
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetAll(int userId, [FromQuery] FavoriteQueryParameters parameters)
     {
+        if (!CanAccess(userId))
+        {
+            return Forbid();
+        }
+
         var favorites = await _favoriteService.GetPagedByUserAsync(userId, parameters);
         return Ok(favorites);
     }
@@ -35,6 +41,11 @@ public class FavoriteController : ControllerBase
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Add(int userId, [FromBody] AddFavoriteRequest request)
     {
+        if (!CanAccess(userId))
+        {
+            return Forbid();
+        }
+
         var favorite = await _favoriteService.AddAsync(userId, request.PetId);
         return CreatedAtAction(nameof(GetAll), new { userId }, favorite);
     }
@@ -45,7 +56,14 @@ public class FavoriteController : ControllerBase
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Remove(int userId, int petId)
     {
+        if (!CanAccess(userId))
+        {
+            return Forbid();
+        }
+
         await _favoriteService.RemoveAsync(userId, petId);
         return NoContent();
     }
+
+    private bool CanAccess(int userId) => userId == User.GetUserId() || User.IsAdmin();
 }
