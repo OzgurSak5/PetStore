@@ -865,17 +865,24 @@ kabul edilebilir bulundu.
 
 ---
 
-## 52. Hata cevaplarının şekli henüz tam tutarlı değil
+## 52. Hata cevaplarının şekli
 
-**Not:** Aynı `404` iki farklı şekilde dönebiliyor. Controller `NotFound()`
+**Sorun:** Aynı `404` iki farklı şekilde dönebiliyordu. Controller `NotFound()`
 döndürdüğünde gövde boş kalıyor, `UseStatusCodePages` dolduruyor ve cevapta `type` ile
-`traceId` oluyor, `detail` olmuyor. Servis `NotFoundException` fırlattığında
-`GlobalExceptionHandler` üretiyor ve cevapta `detail` ile `instance` oluyor, `type`
-olmuyor.
+`traceId` oluyordu, `detail` olmuyordu. Servis `NotFoundException` fırlattığında
+`GlobalExceptionHandler` üretiyor ve cevapta `detail` ile `instance` oluyordu, `type`
+olmuyordu. İkisi de geçerli Problem Details ama aynı API'de iki farklı şekil bulunması
+istemci tarafında can sıkıcı.
 
-İkisi de geçerli Problem Details ama aynı API'de iki farklı şekil bulunması istemci
-tarafında can sıkıcı. Çözümü handler'a `Type` alanı eklemek ya da controller'larda
-`NotFound()` yerine exception fırlatmak. Henüz yapılmadı.
+**Çözüm:** `GlobalExceptionHandler` artık `ProblemDetails` nesnesini elle kurup
+yazmıyor, `IProblemDetailsService.TryWriteAsync` çağırıyor. Böylece ASP.NET Core'un
+varsayılan doldurma mekanizması devreye giriyor ve `type` ile `traceId` her iki yolda
+da aynı şekilde dolduruluyor. `Instance` alanı elle set ediliyor, çünkü varsayılan
+doldurma onu yazmıyor.
+
+**Kalan fark:** `UseStatusCodePages` yolu `application/json`, handler yolu
+`application/problem+json` content-type'ı ile cevap veriyor. Doğrusu ikincisi, ama
+ikisi de ayrıştırılabildiği için peşine düşülmedi.
 
 **Not:** `UseStatusCodePages` eklenmeden önce 401 ve 403 cevaplarının gövdesi tamamen
 boştu — yetkilendirme middleware'i isteği `GlobalExceptionHandler`'a hiç uğratmadan

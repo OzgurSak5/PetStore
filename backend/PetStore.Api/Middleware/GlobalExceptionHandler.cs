@@ -7,57 +7,27 @@ namespace PetStore.Api.Middleware;
 public class GlobalExceptionHandler : IExceptionHandler
 {
     private readonly ILogger<GlobalExceptionHandler> _logger;
+    private readonly IProblemDetailsService _problemDetailsService;
 
-    public GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger)
+    public GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger, IProblemDetailsService problemDetailsService)
     {
         _logger = logger;
+        _problemDetailsService = problemDetailsService;
     }
 
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
-        var problemDetails = exception switch
+        var (status, title) = exception switch
         {
-            NotFoundException => new ProblemDetails
-            {
-                Status = StatusCodes.Status404NotFound,
-                Title = "Not Found",
-                Detail = exception.Message
-            },
-            ValidationException => new ProblemDetails
-            {
-                Status = StatusCodes.Status400BadRequest,
-                Title = "Bad Request",
-                Detail = exception.Message
-            },
-            ConflictException => new ProblemDetails
-            {
-                Status = StatusCodes.Status409Conflict,
-                Title = "Conflict",
-                Detail = exception.Message
-            },
-            UnauthorizedException => new ProblemDetails
-            {
-                Status = StatusCodes.Status401Unauthorized,
-                Title = "Unauthorized",
-                Detail = exception.Message
-            },
-            TooManyRequestsException => new ProblemDetails
-            {
-                Status = StatusCodes.Status429TooManyRequests,
-                Title = "Too Many Requests",
-                Detail = exception.Message
-            },
-            _ => new ProblemDetails
-            {
-                Status = StatusCodes.Status500InternalServerError,
-                Title = "Internal Server Error",
-                Detail = "An unexpected error occurred."
-            }
+            NotFoundException => (StatusCodes.Status404NotFound, "Not Found"),
+            ValidationException => (StatusCodes.Status400BadRequest, "Bad Request"),
+            ConflictException => (StatusCodes.Status409Conflict, "Conflict"),
+            UnauthorizedException => (StatusCodes.Status401Unauthorized, "Unauthorized"),
+            TooManyRequestsException => (StatusCodes.Status429TooManyRequests, "Too Many Requests"),
+            _ => (StatusCodes.Status500InternalServerError, "Internal Server Error")
         };
 
-        problemDetails.Instance = httpContext.Request.Path;
-
-        if (problemDetails.Status == StatusCodes.Status500InternalServerError)
+        if (status == StatusCodes.Status500InternalServerError)
         {
             _logger.LogError(exception, "Unhandled exception");
         }
@@ -66,11 +36,21 @@ public class GlobalExceptionHandler : IExceptionHandler
         {
             httpContext.Response.Headers.RetryAfter = tooManyRequests.RetryAfterSeconds.ToString();
         }
+        httpContext.Response.StatusCode = status;
 
-        httpContext.Response.StatusCode = problemDetails.Status ?? StatusCodes.Status500InternalServerError;
-        await httpContext.Response.WriteAsJsonAsync(problemDetails, cancellationToken);
-
-        return true;
+        return await _problemDetailsService.TryWriteAsync(new ProblemDetailsContext
+        {
+            HttpContext = httpContext,
+            Exception = exception,
+            ProblemDetails =
+            {
+                Status = status,
+                Title = title,
+                Instance = httpContext.Request.Path,
+                Detail = status == StatusCodes.Status500InternalServerError ? "An unexpected error occurred." 
+                    : exception.Message
+            }
+        });
     }
 
 }
