@@ -1,5 +1,4 @@
 using PetStore.Domain.DTOs;
-using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Http;
 
 namespace PetStore.Domain.Interfaces;
@@ -13,16 +12,3 @@ public interface IPetPhotoService
     Task<PetPhotoResponse> UploadAsync(int petId, IFormFile file, bool isPrimary);
 }
 
-public record AddPetPhotoRequest(
-    [Required]
-    [Url]
-    [StringLength(500)]
-    string Url,
-    bool IsPrimary
-);
-
-public class UploadPetPhotoRequest
-{
-    public IFormFile File { get; set; } = null!;
-    public bool IsPrimary { get; set; }
-}
