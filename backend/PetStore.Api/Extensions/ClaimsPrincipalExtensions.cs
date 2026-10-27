@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using PetStore.Domain.Enums;
 using PetStore.Domain.Exceptions;
+using PetStore.Domain.DTOs;
 
 namespace PetStore.Api.Extensions;
 
@@ -19,5 +20,7 @@ public static class ClaimsPrincipalExtensions
     }
 
     public static bool IsAdmin(this ClaimsPrincipal user) => user.IsInRole(nameof(UserRole.Admin));
+
+    public static CurrentUser ToCurrentUser(this ClaimsPrincipal user) => new CurrentUser(user.GetUserId(), user.IsAdmin());
 
 }

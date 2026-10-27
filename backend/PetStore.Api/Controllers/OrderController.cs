@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using PetStore.Domain.DTOs;
 using PetStore.Domain.Interfaces;
 using PetStore.Domain.Enums;
+using PetStore.Api.Extensions;
 
 namespace PetStore.Api.Controllers;
 
@@ -35,7 +36,7 @@ public class OrderController : ControllerBase
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById(int id)
     {
-        var order = await _orderService.GetByIdAsync(id);
+        var order = await _orderService.GetByIdAsync(id, User.ToCurrentUser());
 
         if (order == null)
         {
@@ -50,7 +51,7 @@ public class OrderController : ControllerBase
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Create([FromBody] CreateOrderRequest request)
     {
-        var order = await _orderService.CreateAsync(request);
+        var order = await _orderService.CreateAsync(request, User.ToCurrentUser());
         return CreatedAtAction(nameof(GetById), new { id = order.Id }, order);
     }
 
@@ -60,7 +61,7 @@ public class OrderController : ControllerBase
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Pay(int id)
     {
-        var order = await _orderService.PayAsync(id);
+        var order = await _orderService.PayAsync(id, User.ToCurrentUser());
         return Ok(order);
     }
 
@@ -70,7 +71,7 @@ public class OrderController : ControllerBase
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Cancel(int id)
     {
-        var order = await _orderService.CancelAsync(id);
+        var order = await _orderService.CancelAsync(id, User.ToCurrentUser());
         return Ok(order);
     }
 }

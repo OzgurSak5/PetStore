@@ -6,17 +6,14 @@ namespace PetStore.Domain.Interfaces;
 public interface IOrderService
 {
     Task<PagedResult<OrderResponse>> GetPagedAsync(OrderQueryParameters parameters);
-    Task<OrderResponse?> GetByIdAsync(int id);
-    Task<OrderResponse> CreateAsync(CreateOrderRequest request);
-    Task<OrderResponse> PayAsync(int id);
-    Task<OrderResponse> CancelAsync(int id);
+    Task<OrderResponse?> GetByIdAsync(int id, CurrentUser currentUser);
+    Task<OrderResponse> CreateAsync(CreateOrderRequest request, CurrentUser currentUser);
+    Task<OrderResponse> PayAsync(int id, CurrentUser currentUser);
+    Task<OrderResponse> CancelAsync(int id, CurrentUser currentUser);
     Task CancelExpiredReservationsAsync();
 }
 
 public record CreateOrderRequest(
-    [Range(1, int.MaxValue)]
-    int UserId,
-
     [Required]
     [MinLength(1)]
     List<int> PetIds

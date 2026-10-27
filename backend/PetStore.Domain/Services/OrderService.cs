@@ -46,13 +46,13 @@ public class OrderService : IOrderService
         }
     }
 
-    public async Task<OrderResponse> CreateAsync(CreateOrderRequest request)
+    public async Task<OrderResponse> CreateAsync(CreateOrderRequest request,CurrentUser currentUser)
     {
-        var user = await _userRepository.GetByIdAsync(request.UserId);
+        var user = await _userRepository.GetByIdAsync(currentUser.Id);
 
         if (user == null)
         {
-            throw new ValidationException("User not found.");
+            throw new UnauthorizedException("User not found.");
         }
 
         var petIds = request.PetIds.Distinct().ToList();
@@ -86,7 +86,7 @@ public class OrderService : IOrderService
 
         var order = new Order
         {
-            UserId = request.UserId,
+            UserId = currentUser.Id,
             Status = OrderStatus.Created,
             TotalPrice = pets.Sum(p => p.Price),
             CreatedAt = now
@@ -112,11 +112,16 @@ public class OrderService : IOrderService
     }
 
 
-    public async Task<OrderResponse> PayAsync(int id)
+    public async Task<OrderResponse> PayAsync(int id, CurrentUser currentUser)
     {
         var order = await _orderRepository.GetByIdAsync(id);
 
         if (order is null)
+        {
+            throw new NotFoundException("Order not found.");
+        }
+
+        if (order.UserId != currentUser.Id && !currentUser.IsAdmin)
         {
             throw new NotFoundException("Order not found.");
         }
@@ -140,11 +145,16 @@ public class OrderService : IOrderService
         return MapToResponse(order);
     }
 
-    public async Task<OrderResponse> CancelAsync(int id)
+    public async Task<OrderResponse> CancelAsync(int id,CurrentUser currentUser)
     {
         var order = await _orderRepository.GetByIdAsync(id);
 
         if (order is null)
+        {
+            throw new NotFoundException("Order not found.");
+        }
+
+        if (order.UserId != currentUser.Id && !currentUser.IsAdmin)
         {
             throw new NotFoundException("Order not found.");
         }
@@ -168,11 +178,23 @@ public class OrderService : IOrderService
         return MapToResponse(order);
     }
 
-    public async Task<OrderResponse?> GetByIdAsync(int id)
+    public async Task<OrderResponse?> GetByIdAsync(int id, CurrentUser currentUser)
     {
         var order = await _orderRepository.GetByIdAsync(id);
-        return order != null ? MapToResponse(order) : null;
+
+        if (order == null)
+        {
+            return null;
+        }
+
+        if (order.UserId != currentUser.Id && !currentUser.IsAdmin)
+        {
+            return null;
+        }
+
+        return MapToResponse(order);
     }
+
 
     public async Task<PagedResult<OrderResponse>> GetPagedAsync(OrderQueryParameters parameters)
     {
