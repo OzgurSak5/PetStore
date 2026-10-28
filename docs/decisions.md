@@ -527,6 +527,9 @@ kurulunca gidiyorlar. Birden fazla sunucu çalıştırılırsa da dosyalar tek m
 İkisi de v1 için kabul edilebilir, ama Dockerfile yazılırken volume tanımlanması
 gerekiyor.
 
+**Güncelleme:** Volume tanımlandı (bkz. madde 55). İkinci sorun — birden fazla sunucuda
+dosyaların tek makinede kalması — hâlâ geçerli.
+
 **Alternatif:** Veritabanında `bytea` olarak saklamak. Yedeklemesi kolay ama veritabanını
 şişiriyor ve sorguları yavaşlatıyor, pratikte kaçınılıyor.
 
@@ -887,3 +890,104 @@ ikisi de ayrıştırılabildiği için peşine düşülmedi.
 **Not:** `UseStatusCodePages` eklenmeden önce 401 ve 403 cevaplarının gövdesi tamamen
 boştu — yetkilendirme middleware'i isteği `GlobalExceptionHandler`'a hiç uğratmadan
 kesiyor.
+
+---
+
+## 53. API konteynerleştirildi, iki aşamalı build kullanıldı
+
+**Karar:** `backend/Dockerfile` iki aşamalı. Birinci aşama SDK imajında derleyip
+yayınlıyor, ikinci aşama sadece çalışma zamanı imajını kullanıp yayınlanmış çıktıyı
+kopyalıyor. `docker-compose.yml`'a `api` servisi eklendi, `depends_on` ile veritabanının
+healthcheck'i geçene kadar bekliyor.
+
+**Gerekçe:** Tek aşamalı yazsaydım son imajda derleyici, kaynak kod ve NuGet önbelleği
+de bulunurdu — SDK imajı bir gigabayt civarı, runtime imajı iki yüz megabayt civarı.
+Ayrıca kaynak kodu dağıtılan imajın içinde taşımak gereksiz.
+
+`.csproj` dosyalarının kaynak koddan **önce** kopyalanması Docker'ın katman önbelleği
+için. Her `COPY` ve `RUN` bir katman üretiyor ve girdisi değişmeyen katman yeniden
+çalıştırılmıyor; bu sırayla `dotnet restore` yalnızca bağımlılıklar değiştiğinde
+tekrarlanıyor, her kod değişikliğinde değil.
+
+**Yapılandırma:** Konteynerde user-secrets yok, o yüzden bağlantı dizesi ve JWT anahtarı
+ortam değişkeniyle geçiliyor: `ConnectionStrings__DefaultConnection` ve `Jwt__Key`. .NET
+çift alt çizgiyi iki nokta üst üsteye çeviriyor, çünkü çoğu kabuk ortam değişkeni adında
+iki nokta kabul etmiyor. Değerler `.env` dosyasından okunuyor, o da `.gitignore`'da.
+
+**Not:** Bağlantı dizesinde `Host=postgres` yazıyor, `localhost` değil. Konteyner
+içinden `localhost` kendisi demek; compose her servise kendi adıyla bir ağ adı veriyor.
+
+**Not:** Yerelde `dotnet run` 5087 portunda, konteyner 8080'de çalışıyor. İkincisi .NET
+konteyner imajlarının varsayılanı. `FileStorageSettings__BaseUrl` de konteynerde
+eziliyor, yoksa fotoğraf URL'leri 5087'yi gösterirdi.
+
+---
+
+## 54. Migration'lar uygulama açılışında uygulanıyor
+
+**Karar:** `Program.cs` açılışta `context.Database.MigrateAsync()` çağırıyor. Seed ise
+yalnızca geliştirme ortamında çalışmaya devam ediyor.
+
+**Gerekçe:** Konteyner içinde `dotnet ef database update` çalıştırılamıyor — SDK ve
+`dotnet-ef` aracı runtime imajında yok. Şemanın güncel olmasını sağlamanın pratik yolu
+uygulamanın kendi kendine uygulaması. Böylece `docker compose up` tek başına çalışan bir
+sistem getiriyor.
+
+**Ödünç:** Gerçek üretimde migration'ı ayrı bir adımda çalıştırmak tercih ediliyor.
+Birden fazla konteyner aynı anda açılırsa ikisi de migration uygulamaya kalkışır; EF Core
+bunun için kilit aldığı için veri bozulmuyor ama açılış yavaşlıyor. Daha önemlisi, hatalı
+bir migration'ın üretime kendiliğinden gitmesi istenmeyen bir şey. Bu ölçekte kabul
+edilebilir.
+
+---
+
+## 55. Yüklenen dosyalar named volume'de
+
+**Karar:** `docker-compose.yml`'da `uploads_data` adında bir volume tanımlandı ve
+konteynerdeki `/app/wwwroot/uploads` yoluna bağlandı.
+
+**Gerekçe:** Volume olmadan dosyalar konteynerin yazılabilir katmanında duruyor ve
+konteyner silindiğinde gidiyorlar. `docker compose down` sonrası `up` yapınca yüklenen
+bütün fotoğraflar kaybolurdu. Named volume konteynerin ömründen bağımsız yaşıyor;
+`down -v` denmedikçe silinmiyor.
+
+**Not:** `.dockerignore`'a `**/wwwroot/uploads/` eklendi — yerel makinedeki fotoğrafların
+imaja kopyalanmasının anlamı yok, zaten volume devralıyor.
+
+---
+
+## 56. Bir EF Core uyarısı kasten susturuldu
+
+**Karar:** `AddDbContext` içinde `ConfigureWarnings` ile
+`PossibleIncorrectRequiredNavigationWithQueryFilterInteractionWarning` yok sayılıyor.
+
+**Gerekçe:** Uyarı her açılışta üç kez çıkıyordu: `Favorite → Pet`, `Order → User`,
+`OrderItem → Pet`. Anlattığı durum madde 30'daki durum — sorgu filtresi olan bir
+varlığa zorunlu navigation ile bağlanan bir varlık, `Include` ile yüklendiğinde `null`
+alabiliyor, oysa tip "null olamaz" diyor.
+
+Uyarı haklı ama her ilişki için ele alınmış: `FavoriteRepository`'de `!f.Pet.IsDeleted`
+koşulu elle yazılı, `AuthService.RefreshAsync`'te `stored.User is null` kontrolü var.
+
+**Gerekçe (susturma):** Sürekli görünen ve "normal" diye geçilen uyarılar zamanla gerçek
+uyarıları da görünmez kılıyor. Tek bir olay kimliği susturuldu, diğer bütün uyarılar
+açık kaldı.
+
+**Uyarı:** Bu maddeyi okumadan susturulan uyarıya güvenme. Soft delete uygulanan bir
+varlığa `Include` ile erişen **yeni** bir sorgu yazarsan EF Core artık seni uyarmayacak;
+koşulu elle eklemen gerektiğini hatırlaman lazım.
+
+---
+
+## 57. Log seviyesi SQL ifadelerini gizleyecek şekilde ayarlandı
+
+**Karar:** `appsettings.json`'da `Microsoft.EntityFrameworkCore.Database.Command`
+kategorisi `Warning` seviyesine çekildi.
+
+**Gerekçe:** EF Core geliştirme ortamında çalıştırdığı her SQL'i `Information` seviyesinde
+yazıyor. `ReservationCleanupService` her 60 saniyede bir sorgu çalıştırdığı için ekran
+sürekli doluyordu ve gerçek log satırları kayboluyordu. `Warning` seviyesinde sorgular
+görünmüyor, hatalar görünmeye devam ediyor.
+
+**Not:** Bir sorguyu incelemek gerektiğinde bu satırı geçici olarak `Information`'a
+çekmek yeterli.

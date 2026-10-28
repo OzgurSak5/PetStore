@@ -28,7 +28,8 @@ PetStore/
 │   ├── PetStore.Domain/           Entities, interfaces, services, DTOs
 │   ├── PetStore.Infrastructure/   EF Core, DbContext, repositories
 │   ├── PetStore.Api/              Controllers, DI, Swagger
-│   └── PetStore.Tests/            xUnit
+│   ├── PetStore.Tests/            xUnit
+│   └── Dockerfile                 Two-stage build for the API image
 ├── web/              React + TypeScript (planned)
 ├── ai/               Python + FastAPI (planned)
 ├── qa/               Test collections (planned)
@@ -112,47 +113,12 @@ from being guessed, the second stops one attacker from working through many acco
 
 ## Getting Started
 
-### Prerequisites
+### Everything in Docker
 
-- .NET 10 SDK
-- Docker Desktop
-- `dotnet-ef` tool: `dotnet tool install --global dotnet-ef`
+The only prerequisite is Docker Desktop.
 
-### Steps
-
-**1. Start the database**
-
-Copy `.env.example` to `.env` and fill in `POSTGRES_PASSWORD`:
-
-```bash
-POSTGRES_DB=petstore
-POSTGRES_USER=petstore_user
-POSTGRES_PASSWORD=<your password>
-POSTGRES_PORT=5432
-```
-
-Then:
-
-```bash
-docker compose up -d
-```
-
-**2. Store the connection string in user-secrets**
-
-Connection details never enter the repository; they are supplied through .NET
-user-secrets:
-
-```bash
-cd backend
-dotnet user-secrets init --project PetStore.Api
-dotnet user-secrets set "ConnectionStrings:DefaultConnection" \
-  "Host=localhost;Port=5432;Database=petstore;Username=petstore_user;Password=<your password>" \
-  --project PetStore.Api
-```
-
-**3. Store the JWT signing key in user-secrets**
-
-Generate a random 32-byte key:
+Copy `.env.example` to `.env` and fill in the two secrets — the database password and the
+JWT signing key. The key has to be at least 32 bytes; generate one with:
 
 ```powershell
 $bytes = [byte[]]::new(32)
@@ -161,26 +127,63 @@ $bytes = [byte[]]::new(32)
 ```
 
 ```bash
+POSTGRES_DB=petstore
+POSTGRES_USER=petstore_user
+POSTGRES_PASSWORD=<your password>
+POSTGRES_PORT=5432
+JWT_KEY=<generated key>
+```
+
+Then:
+
+```bash
+docker compose up --build
+```
+
+Swagger UI: `http://localhost:8080/swagger`
+
+The API applies any pending migrations on startup, so there is no separate migration
+step. Nothing from `.env` reaches the repository — the file is git-ignored, and
+`appsettings.json` ships with the key left empty. The application refuses to start if the
+key is missing or too short, so a misconfiguration fails immediately rather than at the
+first login attempt.
+
+Uploaded photos live in a named volume, so they survive `docker compose down`.
+`docker compose down -v` removes the volumes and resets everything.
+
+### Running the API locally
+
+Useful while developing, since the code reloads without rebuilding an image. Needs the
+.NET 10 SDK and `dotnet tool install --global dotnet-ef` on top of Docker.
+
+Start only the database:
+
+```bash
+docker compose up -d postgres
+```
+
+Secrets come from .NET user-secrets rather than `.env`, and never enter the repository:
+
+```bash
+cd backend
+dotnet user-secrets init --project PetStore.Api
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" \
+  "Host=localhost;Port=5432;Database=petstore;Username=petstore_user;Password=<your password>" \
+  --project PetStore.Api
 dotnet user-secrets set "Jwt:Key" "<generated key>" --project PetStore.Api
 ```
 
-The application refuses to start if this key is missing or shorter than 32 bytes, so a
-misconfiguration fails immediately rather than at the first login attempt.
-
-**4. Apply migrations**
+Then apply migrations and run:
 
 ```bash
 dotnet ef database update --project PetStore.Infrastructure --startup-project PetStore.Api
-```
-
-**5. Run the API**
-
-```bash
 cd PetStore.Api
 dotnet run
 ```
 
 Swagger UI: `http://localhost:5087/swagger`
+
+### Seed data
 
 On first run in the Development environment the application seeds a small set of sample
 species, breeds and pets, so the API is usable straight away. It also creates an admin
@@ -327,7 +330,7 @@ Full decision log with alternatives considered: [`docs/decisions.md`](./docs/dec
 - [x] File upload for pet photos
 - [x] Background service to release expired reservations
 - [x] JWT authentication — hashing, refresh rotation, rate limiting, role and ownership checks
-- [ ] Dockerfile for the API itself
+- [x] Dockerfile for the API itself — `docker compose up` brings up database and API
 - [ ] Complete the `docs/openapi.yaml` contract
 - [ ] React web client
 - [ ] AI service: `/generate-description`, `/recommend-pet`
