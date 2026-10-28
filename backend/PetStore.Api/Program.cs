@@ -140,6 +140,25 @@ builder.Services.AddEndpointsApiExplorer();
 
 builder.Services.AddSwaggerGen(options =>
 {
+    options.SwaggerDoc("v1", new Microsoft.OpenApi.OpenApiInfo
+    {
+        Title = "PetStore API",
+        Version = "v1",
+        Description = "Pet adoption API — catalogue, orders, favourites and photos."
+    });
+
+    options.AddServer(new Microsoft.OpenApi.OpenApiServer
+    {
+        Url = "http://localhost:8080",
+        Description = "Docker"
+    });
+
+    options.AddServer(new Microsoft.OpenApi.OpenApiServer
+    {
+        Url = "http://localhost:5087",
+        Description = "Local development"
+    });
+
     options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -151,6 +170,7 @@ builder.Services.AddSwaggerGen(options =>
     });
 
     options.DocumentFilter<BearerSecurityDocumentFilter>();
+    options.SchemaFilter<RecordValidationSchemaFilter>();
 });
 
 var app = builder.Build();
