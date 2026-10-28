@@ -991,3 +991,68 @@ görünmüyor, hatalar görünmeye devam ediyor.
 
 **Not:** Bir sorguyu incelemek gerektiğinde bu satırı geçici olarak `Information`'a
 çekmek yeterli.
+
+---
+
+## 58. API sözleşmesi koddan üretiliyor
+
+**Karar:** `docs/openapi.yaml` elle yazılmıyor; çalışan uygulamanın
+`/swagger/v1/swagger.yaml` çıktısı dosyaya alınıp repoya konuyor.
+
+**Gerekçe:** Ödev "OpenAPI-first" diyor, yani önce sözleşmeyi yazıp kodu ona uydurmak.
+Ben tersini yaptım: kodu yazdım, sözleşmeyi koddan ürettim. İkisi arasındaki fark gerçek
+— contract-first'te sözleşme kaynak, kod ona uymak zorunda ve istemci ekibi backend
+bitmeden çalışmaya başlayabiliyor. Code-first'te sözleşme kodun bir çıktısı, yani kod
+değişince sözleşme de habersizce değişiyor.
+
+Bu projede tek başıma çalıştığım ve API'nin şeklini yazarken keşfettiğim için code-first
+pratikti. Ama seçim bilinçli olsun diye buraya yazıyorum.
+
+**Tuzak:** Üretilmiş dosya repoya girdiği an eskimeye başlıyor. Yeni bir endpoint
+eklenip dosya yenilenmezse sözleşme yalan söylemeye başlıyor. README'ye yenileme komutu
+yazıldı. Daha sağlamı CI'da dosyayı yeniden üretip repodakiyle karşılaştırmak, farklıysa
+build'i kırmak — test ve CI adımında ele alınacak.
+
+**Not:** Dosyada `servers` bloğu iki adres taşıyor, konteyner için 8080 ve yerel çalışma
+için 5087. İstemci üreten araçlar taban adresini oradan okuyor.
+
+---
+
+## 59. Doğrulama kuralları şemaya bir filtre ile taşınıyor
+
+**Sorun:** Doğrulama attribute'ları positional record'ların constructor
+parametrelerinde duruyor (bkz. madde 22), çünkü ASP.NET Core model doğrulaması orada
+arıyor. Swashbuckle ise şemayı property'lerden üretiyor ve attribute'ları hiç görmüyor.
+Sonuç: doğrulama çalışıyor ama sözleşmede görünmüyordu — `RegisterRequest` için
+`required` listesi, `format: email` ve `minLength: 8` yoktu.
+
+Bu önemli bir eksik, çünkü sözleşmeden istemci üreten biri `password` alanının zorunlu
+ve en az 8 karakter olduğunu bilemiyor.
+
+**Denenen ve vazgeçilen yol:** Attribute'ları `[property:]` hedefiyle bir kez daha
+yazmak. Derleniyor ama çalışmıyor — ASP.NET Core, constructor parametresiyle eşleşen bir
+property'de doğrulama attribute'u görünce `InvalidOperationException` atıyor ve o
+endpoint 500 dönüyor. Madde 22'de yaşanan tuzağın aynısı.
+
+**Karar:** `RecordValidationSchemaFilter` adında bir `ISchemaFilter` yazıldı. Filtre her
+şema için tipin birincil constructor'ını bulup parametrelerindeki `ValidationAttribute`
+örneklerini okuyor ve karşılık gelen şema property'sine uyguluyor: `Required` zorunlu
+alan listesine, `EmailAddress` `format: email`'e, `MinLength`/`MaxLength`/`StringLength`
+uzunluk sınırlarına, `Range` sayısal sınırlara.
+
+**Gerekçe:** DTO'lara hiç dokunulmuyor, doğrulama davranışı değişmiyor, sadece doküman
+zenginleşiyor. Sorunu kaynağında değil, sorunun çıktığı yerde çözüyor.
+
+**İki ayrıntı:**
+
+Dizilerde `MinLength` `minItems`'a çevriliyor, `minLength`'e değil — JSON Schema'da
+`minLength` string içindir, dizide yok sayılır. `CreateOrderRequest.petIds` için önemli.
+
+Enum alanları paylaşılan şemalara `$ref` ile bağlandığı için filtre onların içini
+değiştiremiyor; `[Required]` yine üst şemanın zorunlu alan listesine giriyor, yeterli.
+
+**Kalan eksik:** Değer tipleri (`int`, `decimal`, `DateOnly`) `[Required]` taşımadığı
+için `required` listesine girmiyorlar. `CreatePetRequest` gönderirken `breedId`
+yazmazsan sözleşme buna izin veriyor, C# tarafında alan `0` oluyor ve servis katmanı
+"böyle bir cins yok" diye 400 dönüyor. Zararsız ama sözleşme yanlış söylüyor. Doğru
+çözüm bu alanları nullable yapmak, v1'de yapılmadı.

@@ -195,6 +195,18 @@ directly in the database. The seeder is skipped if the database already holds da
 
 ## API
 
+The full contract lives in [`docs/openapi.yaml`](./docs/openapi.yaml), generated from the
+running application. It carries the validation rules as well as the routes — required
+fields, string lengths, numeric ranges and enum values — so a client generated from it
+knows what the API will accept before sending anything.
+
+It is a generated file, so it goes stale the moment an endpoint changes. Regenerate it
+with the API running:
+
+```powershell
+Invoke-WebRequest -Uri "http://localhost:8080/swagger/v1/swagger.yaml" -OutFile "docs/openapi.yaml"
+```
+
 ### Auth
 
 | Method | Route | Description |
@@ -331,7 +343,7 @@ Full decision log with alternatives considered: [`docs/decisions.md`](./docs/dec
 - [x] Background service to release expired reservations
 - [x] JWT authentication — hashing, refresh rotation, rate limiting, role and ownership checks
 - [x] Dockerfile for the API itself — `docker compose up` brings up database and API
-- [ ] Complete the `docs/openapi.yaml` contract
+- [x] Complete the `docs/openapi.yaml` contract
 - [ ] React web client
 - [ ] AI service: `/generate-description`, `/recommend-pet`
 - [ ] Test automation and CI
