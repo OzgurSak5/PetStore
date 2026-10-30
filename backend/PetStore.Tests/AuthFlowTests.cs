@@ -81,6 +81,68 @@ public class AuthFlowTests : IClassFixture<PetStoreApiFactory>
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
+    [Fact]
+    public async Task An_admin_can_create_a_pet()
+    {
+        var tokens = await LoginAsAdminAsync();
+        var client = CreateClientWith(tokens.AccessToken);
+
+        var response = await client.PostAsJsonAsync("/api/Pet", new
+        {
+            name = "Zeytin",
+            breedId = 1,
+            birthDate = "2024-06-01",
+            gender = "Female",
+            price = 5000,
+            isVaccinated = true
+        });
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task A_customer_cannot_read_someone_elses_order()
+    {
+        var owner = await RegisterAndLoginAsync();
+        var ownerClient = CreateClientWith(owner.AccessToken);
+
+        var created = await ownerClient.PostAsJsonAsync(
+            "/api/Order", new { petIds = new[] { 1 } });
+
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+
+        var order = await created.Content.ReadFromJsonAsync<OrderResponse>();
+
+        var stranger = await RegisterAndLoginAsync();
+        var strangerClient = CreateClientWith(stranger.AccessToken);
+
+        var response = await strangerClient.GetAsync($"/api/Order/{order!.Id}");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Repeated_failed_logins_lock_the_account()
+    {
+        var email = $"user-{Guid.NewGuid():N}@example.com";
+        const string password = "Password123!";
+
+        await _client.PostAsJsonAsync("/api/Auth/register", new { email, password });
+
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            var failed = await _client.PostAsJsonAsync(
+                "/api/Auth/login", new { email, password = "WrongPassword1" });
+
+            Assert.Equal(HttpStatusCode.Unauthorized, failed.StatusCode);
+        }
+
+        var blocked = await _client.PostAsJsonAsync(
+            "/api/Auth/login", new { email, password });
+
+        Assert.Equal(HttpStatusCode.TooManyRequests, blocked.StatusCode);
+    }
+
     private async Task<TokenResponse> RegisterAndLoginAsync()
     {
         var email = $"user-{Guid.NewGuid():N}@example.com";
@@ -97,5 +159,13 @@ public class AuthFlowTests : IClassFixture<PetStoreApiFactory>
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         return client;
+    }
+
+    private async Task<TokenResponse> LoginAsAdminAsync()
+    {
+        var login = await _client.PostAsJsonAsync("/api/Auth/login",
+            new { email = "admin@petstore.local", password = "Admin123!" });
+
+        return (await login.Content.ReadFromJsonAsync<TokenResponse>())!;    
     }
 }
