@@ -1,5 +1,7 @@
 # PetStore
 
+[![CI](https://github.com/OzgurSak5/PetStore/actions/workflows/ci.yml/badge.svg)](https://github.com/OzgurSak5/PetStore/actions/workflows/ci.yml)
+
 A pet adoption platform built as a layered .NET 10 API, a React web client, and a Python
 AI service that grounds its recommendations in real data.
 
@@ -13,10 +15,10 @@ reference specification.
 
 | Component | Status |
 |---|---|
-| Backend API | In progress — all eight resources, JWT authentication |
+| Backend API | Complete — eight resources, JWT auth, integration tests in CI |
 | Web (React) | Planned |
 | AI Service (FastAPI + RAG) | Planned |
-| QA (API + E2E tests) | Planned |
+| QA (API + E2E tests) | API tests done — browser E2E planned |
 
 ---
 
@@ -28,7 +30,7 @@ PetStore/
 │   ├── PetStore.Domain/           Entities, interfaces, services, DTOs
 │   ├── PetStore.Infrastructure/   EF Core, DbContext, repositories
 │   ├── PetStore.Api/              Controllers, DI, Swagger
-│   ├── PetStore.Tests/            xUnit
+│   ├── PetStore.Tests/            xUnit integration tests
 │   └── Dockerfile                 Two-stage build for the API image
 ├── web/              React + TypeScript (planned)
 ├── ai/               Python + FastAPI (planned)
@@ -93,6 +95,18 @@ the service layer.
 Operations that span several tables are written in a single `SaveChangesAsync` call, so
 they either all commit or none do. Placing an order inserts one `Order` row, N
 `OrderItem` rows and updates N `Pet` rows atomically.
+
+### Testing
+
+The tests are integration tests rather than unit tests, because most of the rules worth
+protecting live where the layers meet. "A customer cannot read someone else's order"
+depends on the check in the service, on the controller reading the identity from the
+token, and on `[Authorize]` sitting in the right place; a unit test would see only one of
+the three. Each test sends a real HTTP request through the whole pipeline.
+
+They run against a real PostgreSQL container started by Testcontainers, not an in-memory
+provider — the API uses PostgreSQL-specific queries, and a test that passes against a
+fake database is worse than no test.
 
 ### Authentication
 
@@ -182,6 +196,17 @@ dotnet run
 ```
 
 Swagger UI: `http://localhost:5087/swagger`
+
+### Tests
+
+```bash
+cd backend
+dotnet test
+```
+
+Docker has to be running, but nothing needs to be started by hand: the tests spin up
+their own throwaway PostgreSQL container and run the API in-process, so they never touch
+the development database. The same command runs on every push and pull request.
 
 ### Seed data
 
@@ -346,4 +371,4 @@ Full decision log with alternatives considered: [`docs/decisions.md`](./docs/dec
 - [x] Complete the `docs/openapi.yaml` contract
 - [ ] React web client
 - [ ] AI service: `/generate-description`, `/recommend-pet`
-- [ ] Test automation and CI
+- [x] Test automation and CI — integration tests on GitHub Actions

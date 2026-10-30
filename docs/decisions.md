@@ -1056,3 +1056,87 @@ için `required` listesine girmiyorlar. `CreatePetRequest` gönderirken `breedId
 yazmazsan sözleşme buna izin veriyor, C# tarafında alan `0` oluyor ve servis katmanı
 "böyle bir cins yok" diye 400 dönüyor. Zararsız ama sözleşme yanlış söylüyor. Doğru
 çözüm bu alanları nullable yapmak, v1'de yapılmadı.
+
+---
+
+## 60. Testler entegrasyon seviyesinde, Testcontainers ile
+
+**Karar:** `PetStore.Tests` içinde xUnit ile entegrasyon testleri yazıldı.
+`WebApplicationFactory` uygulamayı test sürecinin içinde ayağa kaldırıyor, veritabanı
+için Testcontainers her çalıştırmada geçici bir `postgres:17-alpine` konteyneri açıyor.
+
+**Neden önce entegrasyon:** Yazdığım kuralların çoğu tek bir katmanda değil, katmanların
+birleştiği yerde yaşıyor. "Müşteri başkasının siparişini göremez" kuralı hem
+`OrderService`'teki kontrole hem controller'ın token'dan kimlik okumasına hem
+`[Authorize]`'ın doğru yerde olmasına bağlı. Birim testi bunların yalnızca birini
+görürdü. Entegrasyon testi gerçek bir HTTP isteği attığı için üçünü birden sınıyor.
+
+**Neden Testcontainers:** Üç seçenek vardı. Docker'daki geliştirme veritabanını
+kullanmak en kolayı ama testler birbirinin verisini bozar ve `docker compose up`
+çalışmadan testler kırılır. Her çalıştırmada rastgele adlı bir veritabanı açmak (Login
+projesinde yaptığım) daha temiz ama Postgres'in ayakta olmasını gerektiriyor ve CI'da
+ayrı bir servis tanımı istiyor. Testcontainers konteyneri kendisi açıp kapatıyor; tek ön
+koşul Docker. CI'da da aynı kod çalışıyor, ek yapılandırma yok.
+
+**Neden EF Core InMemory değil:** Çok önerilen ama EF ekibi testler için kullanılmamasını
+söylüyor. Gerçek bir veritabanı değil, ilişkisel kısıtları uygulamıyor, SQL üretmiyor.
+Bu projede `EF.Functions.ILike` var — PostgreSQL'e özgü. InMemory ile yazılan test geçer,
+üretimde patlar. En kötü test türü bu.
+
+**Üç teknik ayrıntı:**
+
+`Program.cs` üst düzey ifadelerle yazıldığı için derleyicinin ürettiği `Program` sınıfı
+`internal`. Dosyanın sonuna `public partial class Program { }` eklendi; testlerin
+`WebApplicationFactory<Program>` yazabilmesi için gerekiyor.
+
+Yapılandırma fabrikaya ortam değişkenleriyle veriliyor (`ConnectionStrings__DefaultConnection`,
+`Jwt__Key`). Sebebi `Program.cs`'in yapılandırmayı daha ilk satırlarda okuması — `Jwt:Key`
+kontrolü `builder.Build()`'dan önce çalışıyor ve anahtar yoksa uygulama hiç açılmıyor.
+Ortam değişkenleri varsayılan yapılandırma kaynaklarından biri olduğu için bu kontrol
+onları görüyor. Docker'da kullandığımız mekanizmanın aynısı.
+
+`IClassFixture` ile fabrika test sınıfı başına bir kez oluşturuluyor, yani bir konteyner
+bütün sınıfa yetiyor. Testlerin neredeyse tamamı ilk konteyner açılışını bekliyor; aynı
+sınıfa yeni test eklemenin maliyeti sıfıra yakın. İkinci bir test sınıfı açılırsa ikinci
+bir konteyner açılacak; o noktada `ICollectionFixture` ile tek konteyneri paylaştırmak
+gerekecek.
+
+**Bir ödünç:** Fabrika `RateLimit__IpPermitLimit` değerini 1000'e çekiyor. `TestServer`'da
+bütün isteklerin IP'si aynı göründüğü için test sayısı yirmiyi geçtiğinde testler
+birbirini 429'a düşürürdü. Yani test ortamı üretimden bir noktada ayrılıyor. Email bazlı
+limit dokunulmadan bırakıldı ve testle sınanıyor.
+
+**Kapsam:** Yedi test var — kayıt ve giriş akışı, refresh token'ın ikinci kullanımda
+reddedilmesi, token'sız istek, müşterinin hayvan oluşturamaması, admin'in
+oluşturabilmesi, başkasının siparişinin görünmemesi, beş başarısız denemeden sonra
+hesabın kilitlenmesi. Hepsi derleyicinin yakalayamayacağı, sessizce bozulabilecek
+kurallar.
+
+**Yazılmayanlar:** Servis katmanı birim testleri henüz yok. `OrderService`'teki
+rezervasyon mantığı ve `PetPhotoService`'teki kapak fotoğrafı kuralları birim testine
+uygun — veritabanı gerektirmiyorlar, sahte repository ile çalışırlar. Sıradaki adım.
+
+---
+
+## 61. CI'da her push ve pull request'te test çalışıyor
+
+**Karar:** `.github/workflows/ci.yml` GitHub Actions iş akışı eklendi. `main`'e her
+push'ta ve `main`'e açılan her pull request'te restore, build ve test çalışıyor.
+
+**Gerekçe:** Testler yalnızca benim makinemde çalıştığı sürece koruyucu değil —
+çalıştırmayı unuttuğum bir gün bozuk kod repoya girer ve kimse fark etmez. CI sonucu
+commit'in yanında gösteriyor.
+
+Pull request'te de çalışması önemli: bozuk kod birleştirilmeden önce yakalanıyor.
+
+**Testcontainers kararının karşılığı burada alınıyor.** GitHub'ın Ubuntu koşucularında
+Docker hazır geliyor, yani ayrı bir Postgres servisi tanımlamak gerekmiyor. Yerelde
+çalışan kodun aynısı CI'da da çalışıyor; iki yerde iki yapılandırma tutmuyorum.
+
+**Adımların ayrılması:** Tek bir `dotnet test` komutu üçünü de yapardı. Ayırmanın sebebi
+teşhis: GitHub arayüzünde hangi aşamada kırıldığı — paket indirilemedi mi, derleme hatası
+mı, test mi — tıklamadan görünüyor.
+
+**Eksik:** `docs/openapi.yaml` üretilmiş bir dosya ve kod değişince elle yenilenmesi
+gerekiyor (bkz. madde 58). CI'da dosyayı yeniden üretip repodakiyle karşılaştıran,
+farklıysa build'i kıran bir adım eklenebilir. Henüz yapılmadı.
